@@ -1,149 +1,180 @@
 use super::*;
-use ratatui::{Terminal, backend::TestBackend, layout::Rect};
+use crate::core::profiles_file::StoredProfile;
+use ratatui::{Terminal, backend::TestBackend};
 
-/// Draws into a test terminal and hands back what it painted. Takes the
-/// settings by reference so the caller keeps the row map the draw left behind,
-/// which is what a click is measured against.
+/// Tall enough that nothing has to scroll out of the way.
+const TALL: u16 = 80;
+
+fn stored() -> StoredProfiles {
+    StoredProfiles { default: "work".to_owned(), profiles: vec![StoredProfile::named("work"), StoredProfile::named("personal")] }
+}
+
+fn context<'a>(theme: &'a Theme, keymap: &'a Keymap, profiles: &'a StoredProfiles) -> Context<'a> {
+    Context { keymap, theme, profiles, default_profile: 0, socket: Path::new("/run/user/1000/atrium/1.sock") }
+}
+
+/// Draws and hands back what was painted, keeping whatever the draw recorded on
+/// the settings state so a click can be measured against it.
 fn rendered(settings: &mut Settings, width: u16, height: u16) -> String {
+    let theme = Theme::classic();
     let keymap = Keymap::default();
+    let profiles = stored();
+    let context = context(&theme, &keymap, &profiles);
+
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), settings, &keymap, &Theme::classic())).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), frame.area(), settings, &context)).expect("draw");
     terminal.backend().buffer().content().chunks(width as usize).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
-/// Tall enough that nothing has to scroll out of the way.
-const TALL: u16 = 40;
-
-#[test]
-fn both_tabs_are_offered() {
-    let out = rendered(&mut Settings::new(&Theme::classic()), 70, TALL);
-    assert!(out.contains("shortcuts"), "{out}");
-    assert!(out.contains("themes"), "{out}");
+fn on_tab(tab: Tab, width: u16) -> (Settings, String) {
+    let mut settings = Settings::new();
+    settings.open(tab);
+    let out = rendered(&mut settings, width, TALL);
+    (settings, out)
 }
 
 #[test]
-fn it_says_how_to_use_itself() {
-    assert!(rendered(&mut Settings::new(&Theme::classic()), 70, TALL).contains("tab switches"));
+fn the_column_keeps_guitars_margin_and_ceiling() {
+    assert_eq!(content_width(Rect::new(0, 0, 120, 40)), 106, "it stops growing at guitar's ceiling");
+    assert_eq!(content_width(Rect::new(0, 0, 80, 40)), 71);
+    assert_eq!(content_width(Rect::new(0, 0, 200, 40)), MAX_CONTENT_WIDTH);
+    assert_eq!(content_width(Rect::new(0, 0, 4, 40)), 0, "a pane with no room does not underflow");
 }
 
 #[test]
-fn the_logo_sits_above_the_rest() {
-    let out = rendered(&mut Settings::new(&Theme::classic()), 70, TALL);
+fn every_row_in_one_pass_is_the_same_width() {
+    let (_, out) = on_tab(Tab::General, 90);
+    // A heading ends at its colon; a filled row carries a value after it.
+    let widths: Vec<usize> = out.lines().map(str::trim_end).filter(|line| line.contains(':') && !line.ends_with(':')).map(|line| line.chars().count()).collect();
+
+    assert!(widths.len() > 3, "expected several rows:\n{out}");
+    // Every filled row ends at the same column, which is what lines them up.
+    assert!(widths.windows(2).all(|pair| pair[0] == pair[1]), "ragged rows: {widths:?}\n{out}");
+}
+
+#[test]
+fn a_value_too_long_for_the_column_ends_in_three_dots() {
+    let (_, out) = on_tab(Tab::General, 40);
+
+    assert!(out.contains("..."), "a narrow column should elide a path:\n{out}");
+}
+
+#[test]
+fn a_heading_sits_between_two_blank_lines() {
+    let (_, out) = on_tab(Tab::General, 90);
     let lines: Vec<&str> = out.lines().collect();
+    let heading = lines.iter().position(|line| line.contains("paths:")).expect("a heading");
 
-    let logo = lines.iter().position(|line| line.contains('▀')).expect("the block should be drawn");
-    let tabs = lines.iter().position(|line| line.contains("shortcuts")).expect("tab bar");
-    assert!(logo < tabs, "the logo belongs above the tab bar:\n{out}");
+    assert!(lines[heading - 1].trim().is_empty(), "no blank above:\n{out}");
+    assert!(lines[heading + 1].trim().is_empty(), "no blank below:\n{out}");
 }
 
 #[test]
-fn the_logo_is_drawn_in_atriums_own_purple() {
-    let settings = &mut Settings::new(&Theme::classic());
-    let keymap = Keymap::default();
-    let mut terminal = Terminal::new(TestBackend::new(70, TALL)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), settings, &keymap, &Theme::classic())).expect("draw");
-
+fn rows_alternate_a_shaded_background() {
     let theme = Theme::classic();
-    let content = terminal.backend().buffer().content();
-    let painted = |colour| content.iter().any(|cell| cell.symbol() == "█" && cell.fg == colour);
+    let keymap = Keymap::default();
+    let profiles = stored();
+    let context = context(&theme, &keymap, &profiles);
+    let mut settings = Settings::new();
 
-    assert!(painted(theme.COLOR_PURPLE), "the block should be purple, not the text colour");
-    assert!(painted(theme.COLOR_DURPLE), "the lower rows take the deeper purple, the way guitar splits its own logo");
+    let mut terminal = Terminal::new(TestBackend::new(90, TALL)).expect("test terminal");
+    terminal.draw(|frame| draw(frame, frame.area(), frame.area(), &mut settings, &context)).expect("draw");
+
+    let buffer = terminal.backend().buffer();
+    let shaded = theme.background_or_default(theme.COLOR_GREY_900);
+    let rows: Vec<bool> = (0..TALL).map(|row| (0..90).any(|column| buffer[(column, row)].bg == shaded)).collect();
+
+    assert!(rows.iter().any(|shaded| *shaded), "no row was shaded at all");
 }
 
 #[test]
-fn a_column_too_narrow_for_the_block_still_names_the_tool() {
-    // 8 columns of margin come off before the logo is measured.
-    let out = rendered(&mut Settings::new(&Theme::classic()), (logo::WIDTH as u16) + 4, TALL);
-
-    assert!(out.contains(logo::COMPACT), "the word should stand in for the block:\n{out}");
-    assert!(!out.contains('▀'), "the block does not fit and should not be drawn:\n{out}");
-}
-
-#[test]
-fn the_shortcuts_tab_lists_every_action_with_its_chord() {
-    let out = rendered(&mut Settings::new(&Theme::classic()), 70, TALL);
-    for (action, chord) in Keymap::default().actions() {
-        assert!(out.contains(action), "{action} missing in:\n{out}");
-        assert!(out.contains(&chord.label()), "{} missing in:\n{out}", chord.label());
+fn the_version_and_the_wordmark_head_every_tab() {
+    for tab in Tab::ALL {
+        let (_, out) = on_tab(tab, 90);
+        assert!(out.contains("version:"), "{tab:?} has no version row:\n{out}");
+        assert!(out.contains('▀'), "{tab:?} has no wordmark:\n{out}");
     }
 }
 
 #[test]
-fn the_themes_tab_lists_themes_and_marks_the_one_in_use() {
-    let mut settings = Settings::new(&Theme::classic());
-    settings.next_tab();
+fn the_tab_bar_names_every_section() {
+    let (_, out) = on_tab(Tab::General, 90);
 
-    let out = rendered(&mut settings, 70, TALL);
+    for tab in Tab::ALL {
+        assert!(out.contains(tab.label()), "{} missing from the bar:\n{out}", tab.label());
+    }
+}
+
+#[test]
+fn a_column_too_narrow_for_the_labels_falls_back_to_dots() {
+    let (_, out) = on_tab(Tab::General, 36);
+
+    assert!(out.contains(COMPACT_TAB), "the bar should narrow rather than overflow:\n{out}");
+    assert!(!out.contains("shortcuts"), "the full labels do not fit and should not be drawn:\n{out}");
+}
+
+#[test]
+fn a_click_at_a_recorded_hitbox_opens_that_tab() {
+    let (settings, _) = on_tab(Tab::General, 90);
+
+    for hitbox in settings.tab_hitboxes.clone() {
+        assert_eq!(settings.tab_at(hitbox.line, hitbox.start), Some(hitbox.tab));
+    }
+}
+
+#[test]
+fn general_lists_the_files_atrium_reads_and_writes() {
+    let (_, out) = on_tab(Tab::General, 100);
+
+    for label in ["paths:", "config:", "profiles:", "theme:", "layout:", "projects:", "root:", "socket:"] {
+        assert!(out.contains(label), "{label} missing:\n{out}");
+    }
+}
+
+#[test]
+fn display_lists_every_theme_with_exactly_one_marked() {
+    let (_, out) = on_tab(Tab::Display, 90);
+
+    assert!(out.contains("themes:"));
     assert!(out.contains("classic"), "{out}");
-    assert!(out.contains("in use"), "the active theme should be marked:\n{out}");
+    assert_eq!(out.matches(RADIO_ON).count(), 1, "exactly one theme is in use:\n{out}");
+    assert!(out.matches(RADIO_OFF).count() > 5, "the rest should be unmarked:\n{out}");
 }
 
 #[test]
-fn a_section_is_named_above_its_rows() {
-    let out = rendered(&mut Settings::new(&Theme::classic()), 70, TALL);
-    let lines: Vec<&str> = out.lines().collect();
+fn profiles_lists_what_is_configured_and_marks_the_default() {
+    let (_, out) = on_tab(Tab::Profiles, 90);
 
-    let heading = lines.iter().position(|line| line.contains("keys")).expect("a named section");
-    let first = lines.iter().position(|line| line.contains("new")).expect("a row");
-    assert!(heading < first, "the heading belongs above its rows:\n{out}");
+    assert!(out.contains("+ add profile"), "{out}");
+    assert!(out.contains("select to manage"), "the actions hint belongs here:\n{out}");
+    assert!(out.contains("work") && out.contains("personal"), "{out}");
+    assert!(out.contains("~/.claude-work"), "a profile shows its directory as written:\n{out}");
+    assert_eq!(out.matches(RADIO_ON).count(), 1, "exactly one default:\n{out}");
 }
 
 #[test]
-fn rows_are_filled_so_the_eye_can_follow_across() {
-    assert!(rendered(&mut Settings::new(&Theme::classic()), 70, TALL).contains('·'));
+fn shortcuts_lists_every_action_with_its_chord() {
+    let (_, out) = on_tab(Tab::Shortcuts, 90);
+
+    assert!(out.contains("keys:"));
+    for (action, chord) in Keymap::default().actions() {
+        assert!(out.contains(action), "{action} missing:\n{out}");
+        assert!(out.contains(&chord.label()), "{} missing:\n{out}", chord.label());
+    }
+}
+
+#[test]
+fn the_cursor_lands_on_a_row_rather_than_a_heading() {
+    let (settings, _) = on_tab(Tab::General, 90);
+
+    assert!(settings.kind_at_cursor().is_some(), "the draw should have snapped it onto something");
 }
 
 #[test]
 fn it_fits_a_terminal_too_small_for_it() {
-    rendered(&mut Settings::new(&Theme::classic()), 14, 3);
-}
-
-#[test]
-fn a_click_lands_on_the_row_under_it() {
-    let mut settings = Settings::new(&Theme::classic());
-    let area = Rect::new(0, 0, 70, TALL);
-    rendered(&mut settings, 70, TALL);
-
-    let first = settings.row_lines[0] as u16;
-    assert_eq!(row_at(&settings, area, first), Some(0));
-    assert_eq!(row_at(&settings, area, first + 1), Some(1));
-    assert_eq!(row_at(&settings, area, first - 1), None, "the blank above the rows is not one");
-}
-
-#[test]
-fn a_click_accounts_for_how_far_the_view_is_scrolled() {
-    let mut settings = Settings::new(&Theme::classic());
-    let area = Rect::new(0, 0, 70, TALL);
-    rendered(&mut settings, 70, TALL);
-
-    let first = settings.row_lines[0];
-    settings.scroll = first;
-    assert_eq!(row_at(&settings, area, 0), Some(0), "the first row is at the top once scrolled onto it");
-}
-
-#[test]
-fn a_click_on_the_tab_bar_picks_that_tab() {
-    let mut settings = Settings::new(&Theme::classic());
-    let area = Rect::new(0, 0, 70, TALL);
-    let out = rendered(&mut settings, 70, TALL);
-
-    let row = settings.tab_line as u16;
-    let line = out.lines().nth(settings.tab_line).expect("the tab bar was drawn");
-    let shortcuts = line.find("shortcuts").expect("a shortcuts label") as u16;
-    let themes = line.find("themes").expect("a themes label") as u16;
-
-    assert_eq!(tab_at(&settings, area, shortcuts, row), Some(Tab::Shortcuts));
-    assert_eq!(tab_at(&settings, area, themes, row), Some(Tab::Themes));
-}
-
-#[test]
-fn a_click_off_the_tab_bar_picks_none_of_them() {
-    let mut settings = Settings::new(&Theme::classic());
-    let area = Rect::new(0, 0, 70, TALL);
-    rendered(&mut settings, 70, TALL);
-
-    let row = settings.tab_line as u16;
-    assert_eq!(tab_at(&settings, area, 69, row), None, "past the labels is no tab");
-    assert_eq!(tab_at(&settings, area, 3, row + 1), None, "only the bar's own line holds tabs");
+    rendered(&mut Settings::new(), 14, 4);
+    rendered(&mut Settings::new(), 2, 2);
+    let mut narrow = Settings::new();
+    narrow.open(Tab::Profiles);
+    rendered(&mut narrow, 10, 6);
 }

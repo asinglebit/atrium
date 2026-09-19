@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use crate::{
     app::input::keymap::{self, Keymap},
-    core::profile::{self, Profile},
+    core::{
+        profile::{self, Profile},
+        profiles_file::{self, StoredProfiles},
+    },
     helpers::palette::{self, Theme},
 };
 
@@ -11,10 +14,14 @@ use crate::{
 pub struct Config {
     pub theme: Theme,
     pub keymap: Keymap,
-    /// What can be held, in the order the picker cycles them.
+    /// What can be held, in the order the picker cycles them, with every path
+    /// and argument expanded ready to launch.
     pub profiles: Vec<Profile>,
     /// Which of them a bare `atrium` uses.
     pub default_profile: usize,
+    /// The same profiles as they are written down, which is what the settings
+    /// view shows and edits. Raw, so saving cannot hardcode a home directory.
+    pub stored_profiles: StoredProfiles,
     /// What the file got wrong. Kept rather than discarded so `--check-config`
     /// can say so; the TUI itself carries on with the defaults.
     pub problems: Vec<String>,
@@ -24,7 +31,7 @@ impl Default for Config {
     /// A fixed base, so parsing is the same everywhere. `load` swaps in
     /// whatever theme.json says before the file gets a look at it.
     fn default() -> Self {
-        Self { theme: Theme::classic(), keymap: Keymap::default(), profiles: profile::defaults(), default_profile: 0, problems: Vec::new() }
+        Self { theme: Theme::classic(), keymap: Keymap::default(), profiles: profile::defaults(), default_profile: 0, stored_profiles: StoredProfiles::default(), problems: Vec::new() }
     }
 }
 
@@ -36,10 +43,21 @@ impl Config {
     /// A missing file is not a problem -- it is the normal case.
     pub fn load() -> Self {
         let base = palette::load_theme();
-        match std::fs::read_to_string(Self::path()) {
+        let mut config = match std::fs::read_to_string(Self::path()) {
             Ok(text) => Self::parse_with(&text, base),
             Err(_) => Self { theme: base, ..Self::default() },
-        }
+        };
+        config.adopt(profiles_file::load());
+        config
+    }
+
+    /// Takes what `profiles.json` says. Split out from `load` so parsing a
+    /// config file stays off the disk, which is what keeps the tests hermetic.
+    pub fn adopt(&mut self, stored: StoredProfiles) {
+        let (profiles, default_profile) = stored.resolve();
+        self.profiles = profiles;
+        self.default_profile = default_profile;
+        self.stored_profiles = stored;
     }
 
     /// Parses against a fixed base theme, which is what keeps tests off the
@@ -65,12 +83,12 @@ impl Config {
         if let Some(section) = table.get("keys").and_then(toml::Value::as_table) {
             config.read_keys(section);
         }
-        if let Some(value) = table.get("profiles") {
-            config.read_profiles(value);
-        }
-        // Read last, so it can name a profile the same file defined.
-        if let Some(value) = table.get("default") {
-            config.read_default(value);
+        // Profiles moved to a file atrium writes, because they are edited in the
+        // settings view now and rewriting this one would lose your comments.
+        for moved in ["profiles", "default"] {
+            if table.contains_key(moved) {
+                config.problems.push(format!("{moved}: profiles live in {} now, and are edited in settings -- this is ignored", profiles_file::path().display()));
+            }
         }
         config
     }
@@ -82,95 +100,6 @@ impl Config {
 
     pub fn profile_named(&self, name: &str) -> Option<&Profile> {
         self.profiles.iter().find(|profile| profile.name == name)
-    }
-
-    fn read_profiles(&mut self, value: &toml::Value) {
-        let Some(entries) = value.as_array() else {
-            self.problems.push(format!("profiles: expected [[profiles]] blocks, got {value}"));
-            return;
-        };
-
-        let mut profiles = Vec::new();
-        for (index, entry) in entries.iter().enumerate() {
-            match entry.as_table() {
-                Some(table) => profiles.extend(self.read_profile(index, table)),
-                None => self.problems.push(format!("profiles[{index}]: expected a [[profiles]] block, got {entry}")),
-            }
-        }
-
-        // Nothing usable: keep the built-in list rather than offering nothing at
-        // all, which would leave the picker with no way to hold anything.
-        if !profiles.is_empty() {
-            self.profiles = profiles;
-        }
-    }
-
-    fn read_profile(&mut self, index: usize, table: &toml::Table) -> Option<Profile> {
-        const SETTINGS: [&str; 5] = ["name", "program", "args", "config_dir", "env"];
-
-        let name = match table.get("name").and_then(toml::Value::as_str).map(str::trim) {
-            Some(name) if !name.is_empty() => name.to_owned(),
-            _ => {
-                self.problems.push(format!("profiles[{index}]: needs a `name`"));
-                return None;
-            },
-        };
-        let program = table.get("program").and_then(toml::Value::as_str).unwrap_or(profile::DEFAULT_PROGRAM).to_owned();
-
-        let mut args = Vec::new();
-        if let Some(value) = table.get("args") {
-            match value.as_array() {
-                Some(items) => {
-                    for item in items {
-                        match item.as_str() {
-                            Some(text) => args.push(profile::expand(text)),
-                            None => self.problems.push(format!("profiles.{name}.args: expected strings, got {item}")),
-                        }
-                    }
-                },
-                None => self.problems.push(format!("profiles.{name}.args: expected a list of strings, got {value}")),
-            }
-        }
-
-        let mut env = Vec::new();
-        if let Some(value) = table.get("config_dir") {
-            match value.as_str() {
-                Some(dir) => env.push((profile::CONFIG_DIR_ENV.to_owned(), profile::expand(dir))),
-                None => self.problems.push(format!("profiles.{name}.config_dir: expected a path as a string, got {value}")),
-            }
-        }
-        if let Some(value) = table.get("env") {
-            match value.as_table() {
-                Some(vars) => {
-                    for (key, item) in vars {
-                        match item.as_str() {
-                            Some(text) => env.push((key.clone(), profile::expand(text))),
-                            None => self.problems.push(format!("profiles.{name}.env.{key}: expected a string, got {item}")),
-                        }
-                    }
-                },
-                None => self.problems.push(format!("profiles.{name}.env: expected a table, got {value}")),
-            }
-        }
-
-        for key in table.keys() {
-            if !SETTINGS.contains(&key.as_str()) {
-                self.problems.push(format!("profiles.{name}.{key}: no such setting"));
-            }
-        }
-
-        Some(Profile { name, program, args, env })
-    }
-
-    fn read_default(&mut self, value: &toml::Value) {
-        let Some(name) = value.as_str() else {
-            self.problems.push(format!("default: expected a profile name as a string, got {value}"));
-            return;
-        };
-        match self.profiles.iter().position(|profile| profile.name == name) {
-            Some(index) => self.default_profile = index,
-            None => self.problems.push(format!("default: no profile named {name:?} -- there is {}", self.profiles.iter().map(|profile| profile.name.as_str()).collect::<Vec<_>>().join(", "))),
-        }
     }
 
     /// Only `name` lives here. Individual colours are guitar's `theme.json`

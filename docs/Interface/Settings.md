@@ -3,59 +3,87 @@
 `ctrl+s` opens it, `esc` closes it. It takes the whole inside of the frame,
 hiding the [[Sidebar]] for as long as it is open.
 
-Laid out the way guitar lays its own out: one centred column that everything
-lines up to, with a header block above it. guitar heads its settings with a
-contribution heatmap and sizes the column to that; atrium has no commits to
-plot, so the **wordmark** takes that place.
+This is guitar's settings view, copied rather than imitated: same column width,
+same rows, same rhythm, same narrowing. What follows is what that means in
+practice.
 
 ```
-                  █      █
-                  █
-            ▄▀▀█ ███ █▄▄ █ █  █ █▀█▀█
-            █  █  █  █   █ █  █ █ █ █
-            ▀▀▀▀  ▀▀ █   █  ▀▀▀ █ █ █
-
-         version ······················ 0.1.0
-
-          shortcuts   themes
-
-             tab switches · enter picks · esc closes
-
-         keys
-
-         new ·························· ctrl+t
-         goto ························· ctrl+g
+(blank)
+ version: ······························· 0.1.0     <- shaded
+(blank)
+        ▟ the wordmark, pink into purple ▙          <- where guitar's heatmap sits
+(blank)
+ general   display   profiles   shortcuts           <- tab bar
+(blank)
+(blank)
+ paths:                                             <- heading, COLOR_HIGHLIGHTED
+(blank)
+ config:            ~/.config/atrium/config.toml    <- shaded
+ profiles:         ~/.config/atrium/profiles.json
+ theme:              ~/.config/atrium/theme.json    <- shaded
+ layout:            ~/.config/atrium/layout.json
 ```
 
-## The logo
+## The column
 
-Five rows, 25 columns. The top two carry only the dot on the `i` and the
-ascender on the `t`; the three below are the x-height every letter shares. The
-first two rows take `COLOR_PURPLE` and the rest `COLOR_DURPLE`, splitting the
-way guitar splits its own logo across two greens. A column with no room for the
-block gets the plain word `atrium` instead.
+Everything lines up to one centred column. Guitar sizes it from its heatmap;
+atrium keeps the same **8 columns of margin** and the same **106-column
+ceiling** and drops the two terms that only exist because heat cells are two
+columns wide:
 
-Purple is atrium's colour: the same `COLOR_PURPLE` paints `atrium` in the title
-line.
+```
+width = (pane width - 1 - 8), capped at 106
+```
+
+So it grows with the frame and stops where guitar's stops. A row is
+`label`, spaces, `value`, filling the column exactly — which is what makes every
+row end at the same place whatever is in it.
+
+## Narrowing
+
+Two things give way, in this order:
+
+- **Values elide** with `...`, not `…`. guitar's `truncate_with_ellipsis`, so a
+  long path becomes `/home/rattleworks/....` rather than being cut off.
+- **The tab bar collapses** to one `•` per tab once the full labels no longer
+  fit, rather than overflowing the column.
+
+```
+     config: /home/rattleworks/....
+
+            • • • •
+```
+
+## Dividers
+
+There are no rules. A section is always **blank line, heading, blank line**, and
+rows are told apart by **alternate shading** — every other row takes
+`COLOR_GREY_900`. The selected line takes `COLOR_GREY_800` over whatever it
+already was.
 
 ## Tabs
 
-| Tab | What it lists |
+| Tab | What it holds |
 | --- | --- |
-| shortcuts | Every action with its chord, as [[Keys]] describes them |
-| themes | All 47 presets, with the one in use marked |
+| general | The four files atrium reads or writes, the [[Projects]] root, and the [[Adapters and hooks\|status socket]] |
+| display | All 47 [[Themes]], with a radio marker on the one in use. Enter applies and writes it |
+| profiles | Adding, renaming and deleting [[Profiles]] |
+| shortcuts | Every action with its chord, as [[Keys]] lists them |
 
-`tab`, `left` and `right` switch tabs; `j`/`k` and the arrows move; `enter`
-applies the theme under the cursor and writes it — see [[Themes]]. Each tab
-keeps its own cursor, so switching back and forth does not lose your place.
+`tab`, `left` and `right` switch; `j`/`k` and the arrows move; `enter` picks.
+A new tab starts at its top.
 
-## Geometry
+## The cursor addresses lines, not rows
 
-The column is the frame's width less 8 columns of margin, capped at **48** — a
-settings row stretched across a full-screen terminal is unreadable. Section
-headings are left-aligned *inside* that centred column, not centred text.
+Headings and blank lines are lines too. Moving nudges the cursor by one, and the
+next draw **snaps** it onto something it can land on: the next one in the
+direction it was going, and failing that the nearest by distance.
 
-The whole view scrolls as one, logo included, so the scroll trap counts lines
-rather than rows. Each draw records where it put the selectable rows and the tab
-bar, which is what a click is measured against — building it twice is what would
-let drawing and clicking disagree.
+That is why j/k walks a section evenly instead of appearing to stick on the gap
+before a heading. A click is different — it lands only on a line that can be
+landed on, because the pointer said exactly where it meant.
+
+## Scrollbar
+
+On the frame's own right border, where guitar puts its own, with the same
+`╮` `╯` `│` `▌`. The whole view scrolls, wordmark included.

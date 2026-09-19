@@ -1,7 +1,7 @@
 # Profiles
 
 A **profile** is a named launch recipe: which CLI, plus what to add to its
-command line and its environment. `src/core/profile.rs`.
+command line and its environment.
 
 It exists because a Claude **subscription** is nothing more than that. These
 were two shell aliases:
@@ -12,55 +12,95 @@ alias clp='CLAUDE_CONFIG_DIR=$HOME/.claude-personal claude --append-system-promp
 ```
 
 An environment variable and a flag. atrium could reach neither, because an
-`AgentSpec` carried only a program, its arguments and a directory — so holding a
-personal-subscription agent inside atrium was impossible.
+`AgentSpec` carried only a program, its arguments and a directory.
 
-## Writing one
+## Where they live
 
-```toml
-default = "work"
+`~/.config/atrium/profiles.json`, a file **atrium writes**, beside `theme.json`
+and `layout.json`. They are not in `config.toml`, and that is deliberate: they
+are edited in the [[Settings]] view, and rewriting a TOML file drops its
+comments and reformats everything else in it. A `config.toml` still carrying the
+old `[[profiles]]` block is told where they went — see [[Configuration]].
 
-[[profiles]]
-name = "work"
-config_dir = "~/.claude-work"
-args = ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"]
+```json
+{
+  "default": "work",
+  "profiles": [
+    { "name": "work", "config_dir": "~/.claude-work",
+      "args": ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"] }
+  ]
+}
 ```
 
-| Setting | Meaning |
+| Field | Meaning |
 | --- | --- |
-| `name` | Required. What the picker and the row call it |
-| `program` | The CLI. Defaults to `claude`, so a subscription need not repeat it |
+| `name` | Required. What the picker and the [[Sidebar]] row call it |
+| `program` | The CLI. Empty means `claude`, so a subscription need not say it |
 | `config_dir` | Shorthand for `CLAUDE_CONFIG_DIR` — which subscription, and nothing else |
 | `args` | Added to the command line, in order |
-| `env` | An inline table, for anything `config_dir` does not cover |
+| `env` | `[{ "name": …, "value": … }]`, for anything `config_dir` does not cover |
 
-`config_dir` and every `args` entry get **`~` and `$VAR` expansion**, so a path
-can be pasted straight out of a shell alias rather than hardcoded. An unset
-variable expands to nothing, the way a shell would; `$5` is five dollars,
-because a name has to start with a letter or an underscore.
+**What is stored is raw.** `~/.claude-work` stays `~/.claude-work` on disk and
+is expanded only on the way to a child process. Saving the expanded form would
+quietly hardcode one machine's home directory into a file you might sync.
 
-The rules live in `expand_with`, which takes its lookup as an argument. That is
-not decoration: setting an environment variable is process-wide and the test
-suite runs in parallel, so a test that set one to check expansion would race
-every other test that read one.
+An unset variable expands to nothing, the way a shell would; `$5` is five
+dollars, because a name has to start with a letter or an underscore. The rules
+live in `expand_with`, which takes its lookup as an argument — not decoration:
+setting an environment variable is process-wide and the test suite runs in
+parallel, so a test that set one to check expansion would race every other test
+that read one.
+
+## Managing them
+
+The `profiles` tab in [[Settings]], modelled on guitar's remote management.
+
+```
+ profiles:
+
+ actions:            select to manage | + add to create
+
+ + add profile                                  (enter)
+ work       ~/.claude-work                          🞊
+ personal   ~/.claude-personal                      🞅
+```
+
+**`+ add profile`** chains three prompts — name, then config dir prefilled with
+`~/.claude-<name>`, then args — so the common case is a name and two presses of
+enter. Esc backs out of the whole thing rather than one step, because half an
+added profile is not worth keeping.
+
+**Selecting one** opens an action list: `set as default`, `rename`,
+`edit config dir`, `edit args`, `delete`. Editing prefills with what is there
+now, so it is a correction rather than retyping. Deleting asks first.
+
+Every change is written straight away and taken up at once — the next `ctrl+t`
+sees it without atrium being restarted. A refusal, such as a name already taken,
+stays in the modal so the answer can be corrected without starting again.
+
+Args are typed as **one line and split on spaces**, which cannot carry a quoted
+argument containing one. The prompt says so rather than pretending otherwise.
 
 ## Choosing one
 
-- **`atrium`** holds whatever `default` names. An unknown `default` is reported
-  by [[Configuration|--check-config]] and the first profile is used.
-- **`atrium --profile personal`** holds that one instead. This is the flag the
-  two aliases collapse into.
+- **`atrium`** holds whatever `default` names. An unknown default falls back to
+  the first profile.
+- **`atrium --profile personal`** holds that one instead — the flag the two
+  aliases collapse into.
+- **The [[Splash]]**, which is what a bare `atrium` opens on: the profiles are
+  its list, and enter holds the selected one where you started.
 - **`ctrl+t`**, then `tab`. The picker's `tab` used to cycle bare CLI names; it
   now cycles profiles, so the axis that already existed does the job and the
   modal gained no new key. See [[Modals]].
 
-With no `[[profiles]]` configured at all, atrium synthesises one per CLI it
-knows — `claude`, `opencode`, `codex` — so the picker has a single code path and
-nothing changes for someone who has never written a profile.
+With nothing configured, atrium synthesises one profile per CLI it knows —
+`claude`, `opencode`, `codex` — so the picker has a single code path and nothing
+changes for someone who has never written a profile. Deleting the last profile
+leaves that list rather than nothing.
 
 ## Seeing which one
 
-A profile whose name *is* its program renders as just `claude`, and tags no
+A profile whose name *is* its program renders as just `claude` and tags no
 [[Sidebar]] row: every row would carry the same word, which says nothing. A
 named one shows both — `claude · work` in the picker, `work` on the row.
 
@@ -70,8 +110,8 @@ subscriptions are otherwise the same row twice.
 ## What it does not touch
 
 - `atrium bash --norc` picks up **no** profile. A command named on the command
-  line is held exactly as written, rather than inheriting Claude's environment.
+  line is held exactly as written.
 - Hooks are unaffected — they go in via `--settings` (see
   [[Adapters and hooks]]), independent of `CLAUDE_CONFIG_DIR`.
-- A profile's env is applied **before** the adapter's own wiring, so a profile
-  cannot shadow `ATRIUM_AGENT_ID` or `ATRIUM_SOCK`.
+- A profile's env is applied **before** the adapter's own wiring, so it cannot
+  shadow `ATRIUM_AGENT_ID` or `ATRIUM_SOCK`.

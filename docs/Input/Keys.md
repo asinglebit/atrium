@@ -6,7 +6,7 @@ fire directly — there is no leader to press first.**
 | Chord | Action |
 | --- | --- |
 | `ctrl+t` | hold a new agent |
-| `ctrl+x` | close this one; closing the last ends atrium |
+| `ctrl+x` | close this one; closing the last goes back to the [[Splash]] |
 | `ctrl+n` / `ctrl+p` | next / previous |
 | `ctrl+g` | go to, where `1`…`9` jump straight to a row |
 | `ctrl+o` | show or hide the [[Sidebar]] |

@@ -2301,7 +2301,7 @@ pub fn preset_named(label: &str) -> Option<Theme> {
     THEME_PRESETS.iter().find(|preset| preset.label == label).map(|preset| preset.theme)
 }
 
-fn theme_path() -> PathBuf {
+pub fn theme_path() -> PathBuf {
     let own = config_path_for("atrium");
     if own.exists() { own } else { config_path_for("guitar") }
 }

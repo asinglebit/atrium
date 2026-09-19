@@ -21,9 +21,9 @@ const HELP: &str = "\
 atrium -- a terminal UI that holds coding agents
 
 USAGE
-    atrium                    hold the default profile
-    atrium --profile NAME     hold that profile instead
-    atrium [COMMAND ...]      hold COMMAND, with no profile at all
+    atrium                    open on the splash and pick a harness
+    atrium --profile NAME     skip it and hold that profile here
+    atrium [COMMAND ...]      skip it and hold COMMAND, with no profile at all
     atrium hook <EVENT>       report an agent's status (agents call this, you do not)
 
 OPTIONS
@@ -35,7 +35,7 @@ PROFILES
     A profile is a CLI plus what it needs: extra flags, and extra environment.
     A Claude subscription is one of these -- `config_dir` sets CLAUDE_CONFIG_DIR,
     so `work` and `personal` are two profiles rather than two shell aliases.
-    Inside the new-agent modal, `tab` cycles them.
+    Inside the new-agent modal, `tab` cycles them, and the splash lists them.
 
 KEYS
     Actions fire directly; every other key reaches the focused agent.
@@ -106,11 +106,11 @@ fn cwd() -> std::path::PathBuf {
 
 /// A named command is held exactly as written, with no profile attached --
 /// `atrium bash --norc` should not pick up Claude's environment.
-fn agent_spec(args: &[String], config: &Config) -> AgentSpec {
-    match args.split_first() {
-        Some((program, rest)) => AgentSpec::new(program.clone(), rest.to_vec(), cwd()),
-        None => AgentSpec::from_profile(config.default_profile(), cwd()),
-    }
+///
+/// Nothing at all opens the splash instead of guessing: with no argument
+/// nothing was asked for, so atrium asks.
+fn agent_spec(args: &[String]) -> Option<AgentSpec> {
+    args.split_first().map(|(program, rest)| AgentSpec::new(program.clone(), rest.to_vec(), cwd()))
 }
 
 fn profile_names(config: &Config) -> String {
@@ -127,10 +127,10 @@ fn run_profile(name: Option<&String>, config: Config) -> io::Result<()> {
         eprintln!("no profile named {name:?}. There is: {}", profile_names(&config));
         std::process::exit(1);
     };
-    run_tui(AgentSpec::from_profile(&profile, cwd()), config)
+    run_tui(Some(AgentSpec::from_profile(&profile, cwd())), config)
 }
 
-fn run_tui(spec: AgentSpec, config: Config) -> io::Result<()> {
+fn run_tui(spec: Option<AgentSpec>, config: Config) -> io::Result<()> {
     let mut terminal = ratatui::init();
     // ratatui does not turn this on, and without it a paste arrives as a burst
     // of individual keystrokes.
@@ -167,6 +167,6 @@ fn main() -> io::Result<()> {
     }
 
     let config = Config::load();
-    let spec = agent_spec(&args, &config);
+    let spec = agent_spec(&args);
     run_tui(spec, config)
 }

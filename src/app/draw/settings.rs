@@ -1,196 +1,308 @@
+use std::path::Path;
+
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 use crate::{
     app::{
         input::keymap::Keymap,
-        state::settings::{Settings, Tab},
+        state::settings::{Selection, SelectionKind, Settings, Tab, TabHitbox},
+    },
+    core::{
+        config::Config,
+        layout_config,
+        profiles_file::{self, StoredProfiles},
+        projects,
     },
     helpers::{
         logo,
-        palette::{THEME_PRESETS, Theme},
-        text::truncate,
+        palette::{self, THEME_PRESETS, Theme},
+        scroll,
+        text::{fill_width, truncate_with_ellipsis},
         version::VERSION,
     },
 };
 
-/// Fills the gap between a label and its value so the eye can follow one across.
-const FILL: char = '·';
-
-/// What the view says about working itself, under the tab bar.
-const HINT: &str = "tab switches · enter picks · esc closes";
-
 /// Margin kept either side of the centred column, as guitar keeps for its own.
 const MARGIN: usize = 8;
 
-/// However wide the frame gets, the column stops growing here -- a settings row
-/// stretched across a full-screen terminal is unreadable.
-const MAX_CONTENT_WIDTH: usize = 48;
+/// Guitar's column tops out at 53 heatmap weeks of two columns each. atrium has
+/// no heatmap but keeps the ceiling: a settings row stretched across a
+/// full-screen terminal is unreadable either way.
+const MAX_CONTENT_WIDTH: usize = 106;
 
-/// The settings view, in guitar's shape: one centred column, a logo above it
-/// where guitar puts its heatmap, then the tab bar and the section below.
-pub fn draw(frame: &mut Frame, area: Rect, settings: &mut Settings, keymap: &Keymap, theme: &Theme) {
-    let width = content_width(area);
-    let body = body(settings, keymap, theme, width);
+/// guitar's default symbol theme, hardcoded because atrium has no symbols.json.
+const RADIO_ON: &str = "🞊";
+const RADIO_OFF: &str = "🞅";
+const COMPACT_TAB: &str = "•";
 
-    settings.row_lines = body.rows;
-    settings.tab_line = body.tab_line;
-    settings.trap_scroll(body.lines.len(), area.height as usize);
+/// Two spaces between tab labels, as guitar spaces its own.
+const TAB_GAP: &str = "  ";
 
-    // The paragraph carries the background itself, so the lines it does not
-    // reach are painted rather than left as the terminal's own.
-    let shown: Vec<Line> = body.lines.into_iter().skip(settings.scroll).take(area.height as usize).collect();
-    frame.render_widget(Paragraph::new(shown).style(theme.background_style()), area);
+/// Everything the view reads that is not its own state.
+pub struct Context<'a> {
+    pub keymap: &'a Keymap,
+    pub theme: &'a Theme,
+    pub profiles: &'a StoredProfiles,
+    pub default_profile: usize,
+    pub socket: &'a Path,
 }
 
-/// Everything the view draws, and where the parts a click can land on ended up.
-/// Built in one pass so drawing, scrolling and clicking cannot disagree about
-/// which line is which.
+/// The settings view. `area` is the pane it fills; `border` is what the
+/// scrollbar rides on, which is the app's own frame, the way guitar does it.
+pub fn draw(frame: &mut Frame, area: Rect, border: Rect, settings: &mut Settings, context: &Context) {
+    let width = content_width(area);
+    let body = body(settings.tab(), context, area, width);
+
+    settings.selections = body.selections;
+    settings.tab_hitboxes = body.hitboxes;
+    settings.snap();
+
+    let visible = area.height as usize;
+    let total = body.lines.len();
+    settings.trap_scroll(total, visible);
+
+    let start = settings.scroll.min(total.saturating_sub(visible));
+    let end = (start + visible).min(total);
+    let theme = context.theme;
+
+    let items: Vec<ListItem> = body.lines[start..end]
+        .iter()
+        .enumerate()
+        .map(|(offset, line)| {
+            let mut line = line.clone();
+            // A blank line still has to occupy its row, or the shading behind it
+            // collapses and the rhythm of the sections goes with it.
+            if line.spans.is_empty() {
+                line.spans.push(Span::raw(" "));
+            }
+            if start + offset == settings.selected {
+                let spans: Vec<Span> = line.spans.iter().map(|span| Span::styled(span.content.clone(), span.style.bg(theme.background_or_default(theme.COLOR_GREY_800)))).collect();
+                line = Line::from(spans).centered();
+            }
+            ListItem::from(line)
+        })
+        .collect();
+
+    frame.render_widget(List::new(items).style(theme.background_style()), area);
+
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("╮"))
+        .end_symbol(Some("╯"))
+        .track_symbol(Some("│"))
+        .thumb_symbol("▌")
+        .track_style(Style::default().fg(theme.COLOR_BORDER))
+        .thumb_style(Style::default().fg(theme.COLOR_GREY_600));
+    frame.render_stateful_widget(scrollbar, border, &mut ScrollbarState::new(scroll::content_length(total, visible)).position(start));
+}
+
+/// Everything the view draws, and where the parts that can be landed on ended
+/// up. Built in one pass so drawing, scrolling and clicking cannot disagree.
 struct Body {
     lines: Vec<Line<'static>>,
-    /// The line each selectable row sits on, in order.
-    rows: Vec<usize>,
-    tab_line: usize,
+    selections: Vec<Selection>,
+    hitboxes: Vec<TabHitbox>,
+}
+
+impl Body {
+    fn blank(&mut self) {
+        self.lines.push(Line::default());
+    }
+
+    fn push(&mut self, line: Line<'static>) {
+        self.lines.push(line);
+    }
+
+    /// Marks the line just pushed as one the cursor can land on.
+    fn selectable(&mut self, kind: SelectionKind) {
+        self.selections.push(Selection { line: self.lines.len().saturating_sub(1), kind });
+    }
 }
 
 fn content_width(area: Rect) -> usize {
-    (area.width as usize).saturating_sub(MARGIN).min(MAX_CONTENT_WIDTH)
+    (area.width as usize).saturating_sub(1).saturating_sub(MARGIN).min(MAX_CONTENT_WIDTH)
 }
 
-fn body(settings: &Settings, keymap: &Keymap, theme: &Theme, width: usize) -> Body {
-    let mut lines: Vec<Line<'static>> = vec![Line::default()];
-
-    let rows = logo::rows_for(width);
-    for (index, row) in rows.iter().enumerate() {
-        // The brighter purple on top and the deeper one below, which is how
-        // guitar splits its own logo across two greens.
-        let colour = if index < logo::BRIGHT_ROWS || rows.len() == 1 { theme.COLOR_PURPLE } else { theme.COLOR_DURPLE };
-        lines.push(Line::from(Span::styled(*row, Style::default().fg(colour))).centered());
-    }
-
-    lines.push(Line::default());
-    lines.push(filled("version", VERSION, width, theme, None));
-    lines.push(Line::default());
-    let tab_line = lines.len();
-    lines.push(tab_bar(settings, theme, width));
-    lines.push(Line::default());
-    lines.push(Line::from(Span::styled(HINT, Style::default().fg(theme.COLOR_GREY_700))).centered());
-
-    let (heading, entries) = match settings.tab() {
-        Tab::Shortcuts => ("keys", shortcut_entries(keymap)),
-        Tab::Themes => ("themes", theme_entries(theme)),
-    };
-
-    lines.push(Line::default());
-    lines.push(section(heading, width, theme));
-    lines.push(Line::default());
-
-    let mut row_lines = Vec::with_capacity(entries.len());
-    for (index, (label, value)) in entries.iter().enumerate() {
-        let background = if index == settings.selected() {
-            Some(theme.background_or_default(theme.COLOR_GREY_800))
-        } else if index.is_multiple_of(2) {
-            Some(theme.background_or_default(theme.COLOR_GREY_900))
-        } else {
-            None
-        };
-        row_lines.push(lines.len());
-        lines.push(filled(label, value, width, theme, background));
-    }
-
-    Body { lines, rows: row_lines, tab_line }
+/// Where a centred row of this width starts on screen, which is what a tab
+/// hitbox has to be measured from.
+fn centred_start(area: Rect, width: usize) -> u16 {
+    area.x + area.width.saturating_sub(width as u16) / 2
 }
 
-/// A centred heading over a section, left-aligned inside the column the way
-/// guitar's are.
+/// A section heading: the label padded out to the column, in the highlight
+/// colour, and always between two blank lines -- that is guitar's divider.
 fn section(label: &str, width: usize, theme: &Theme) -> Line<'static> {
-    let padded = format!(" {label}{}", " ".repeat(width.saturating_sub(label.chars().count() + 1)));
-    Line::from(Span::styled(padded, Style::default().fg(theme.COLOR_HIGHLIGHTED))).centered()
+    Line::from(Span::styled(fill_width(label, "", width), Style::default().fg(theme.COLOR_HIGHLIGHTED))).centered()
 }
 
-/// `label ········ value`, sized to the column and carrying the row's own
-/// background so a stripe runs the whole way across it.
-fn filled(label: &str, value: &str, width: usize, theme: &Theme, background: Option<Color>) -> Line<'static> {
-    let label = truncate(label, width.saturating_sub(4));
-    let value = truncate(value, width.saturating_sub(label.chars().count() + 3));
-    let gap = width.saturating_sub(label.chars().count() + value.chars().count() + 3);
+/// `label            value`, filling the column exactly.
+fn row(left: &str, right: &str, width: usize, style: Style) -> Line<'static> {
+    Line::from(Span::styled(fill_width(left, right, width), style)).centered()
+}
 
-    let paint = |colour: Color| {
-        let style = Style::default().fg(colour);
-        match background {
-            Some(background) => style.bg(background),
-            None => style,
+/// Rows alternate a shaded background, which is what separates them without a
+/// rule between every pair.
+fn shade(index: usize, theme: &Theme) -> Style {
+    let style = Style::default().fg(theme.COLOR_TEXT);
+    if index.is_multiple_of(2) { style.bg(theme.background_or_default(theme.COLOR_GREY_900)) } else { style }
+}
+
+fn body(tab: Tab, context: &Context, area: Rect, width: usize) -> Body {
+    let mut body = Body { lines: Vec::new(), selections: Vec::new(), hitboxes: Vec::new() };
+
+    header(&mut body, tab, context, area, width);
+    match tab {
+        Tab::General => general(&mut body, context, width),
+        Tab::Display => display(&mut body, context, width),
+        Tab::Profiles => profiles(&mut body, context, width),
+        Tab::Shortcuts => shortcuts(&mut body, context, width),
+    }
+
+    body
+}
+
+/// Blank, version, blank, wordmark, blank, tab bar, blank -- guitar's header,
+/// with the wordmark standing where its heatmap stands.
+fn header(body: &mut Body, tab: Tab, context: &Context, area: Rect, width: usize) {
+    let theme = context.theme;
+
+    body.blank();
+    body.push(row(" version:", &format!("{VERSION} "), width, shade(0, theme)));
+    body.selectable(SelectionKind::Info);
+
+    body.blank();
+    let rows = logo::rows_for(width);
+    for (index, line) in rows.iter().enumerate() {
+        let colour = logo::tone(index, rows, theme);
+        body.push(Line::from(Span::styled(*line, Style::default().fg(colour))).centered());
+    }
+
+    body.blank();
+    tab_bar(body, tab, context, area, width);
+    body.blank();
+}
+
+fn tab_bar(body: &mut Body, current: Tab, context: &Context, area: Rect, width: usize) {
+    let theme = context.theme;
+    let line = body.lines.len();
+
+    // Full labels when they fit, a dot each when they do not -- guitar narrows
+    // the same way rather than letting the bar overflow.
+    let full: Vec<String> = Tab::ALL.iter().map(|tab| format!(" {} ", tab.label())).collect();
+    let full_width = full.iter().map(|label| label.chars().count()).sum::<usize>() + TAB_GAP.len() * (full.len() - 1);
+    let (labels, gap) = if full_width <= width { (full, TAB_GAP) } else { (Tab::ALL.iter().map(|_| COMPACT_TAB.to_owned()).collect(), " ") };
+
+    let bar_width = labels.iter().map(|label| label.chars().count()).sum::<usize>() + gap.chars().count() * (labels.len() - 1);
+    let pad = width.saturating_sub(bar_width);
+    let left_pad = pad / 2;
+    let start = centred_start(area, bar_width + pad);
+
+    let mut spans = vec![Span::raw(" ".repeat(left_pad))];
+    let mut offset = left_pad;
+    for (index, (tab, label)) in Tab::ALL.iter().zip(&labels).enumerate() {
+        if index > 0 {
+            spans.push(Span::raw(gap));
+            offset += gap.chars().count();
         }
-    };
 
-    Line::from(vec![
-        Span::styled(format!(" {label} "), paint(theme.COLOR_GREY_300)),
-        Span::styled(FILL.to_string().repeat(gap), paint(theme.COLOR_BORDER)),
-        Span::styled(format!(" {value} "), paint(theme.COLOR_TEXT)),
-    ])
-    .centered()
-}
+        let label_width = label.chars().count();
+        body.hitboxes.push(TabHitbox { tab: *tab, line, start: start + offset as u16, end: start + (offset + label_width) as u16 });
 
-/// How wide the tab bar's own content is: the column, unless the labels need
-/// more than the column has. Both drawing and hit-testing centre on this.
-fn tab_bar_width(width: usize) -> usize {
-    let labels: usize = Tab::ALL.iter().map(|tab| tab.label().chars().count() + 3).sum();
-    (labels + 1).max(width)
-}
-
-fn tab_bar(settings: &Settings, theme: &Theme, width: usize) -> Line<'static> {
-    let mut spans = vec![Span::raw(" ")];
-    let mut used = 1;
-    for tab in Tab::ALL {
-        let style = if tab == settings.tab() { Style::default().fg(theme.COLOR_GREY_200).bg(theme.background_or_default(theme.COLOR_GREY_800)) } else { Style::default().fg(theme.COLOR_GREY_600) };
-        let label = format!(" {} ", tab.label());
-        used += label.chars().count() + 1;
-        spans.push(Span::styled(label, style));
-        spans.push(Span::raw(" "));
+        let style = if *tab == current { Style::default().fg(theme.COLOR_HIGHLIGHTED).bg(theme.background_or_default(theme.COLOR_GREY_900)) } else { Style::default().fg(theme.COLOR_TEXT) };
+        spans.push(Span::styled(label.clone(), style));
+        offset += label_width;
     }
-    // Padded out to the column so the bar centres with everything else rather
-    // than around its own middle.
-    spans.push(Span::raw(" ".repeat(tab_bar_width(width).saturating_sub(used))));
+    spans.push(Span::raw(" ".repeat(pad.saturating_sub(left_pad))));
 
-    Line::from(spans).centered()
+    body.push(Line::from(spans).centered());
 }
 
-fn shortcut_entries(keymap: &Keymap) -> Vec<(String, String)> {
-    keymap.actions().iter().map(|(name, chord)| ((*name).to_owned(), chord.label())).collect()
-}
+fn general(body: &mut Body, context: &Context, width: usize) {
+    let theme = context.theme;
 
-fn theme_entries(theme: &Theme) -> Vec<(String, String)> {
-    THEME_PRESETS.iter().map(|preset| (preset.label.to_owned(), if preset.theme.name == theme.name { "in use".to_owned() } else { String::new() })).collect()
-}
-
-/// Which row is under a click, worked out from where the last draw put them.
-pub fn row_at(settings: &Settings, area: Rect, row: u16) -> Option<usize> {
-    let line = settings.scroll + usize::from(row.checked_sub(area.y)?);
-    settings.row_lines.iter().position(|at| *at == line)
-}
-
-/// Which tab a click on the bar lands on, if any. The bar is centred inside the
-/// column, so the walk has to start where the centring put it.
-pub fn tab_at(settings: &Settings, area: Rect, column: u16, row: u16) -> Option<Tab> {
-    if settings.scroll + usize::from(row.checked_sub(area.y)?) != settings.tab_line {
-        return None;
+    body.blank();
+    body.push(section(" paths:", width, theme));
+    body.blank();
+    let paths = [(" config:", Config::path()), (" profiles:", profiles_file::path()), (" theme:", palette::theme_path()), (" layout:", layout_config::path())];
+    for (index, (label, path)) in paths.iter().enumerate() {
+        body.push(row(label, &format!("{} ", path.display()), width, shade(index, theme)));
+        body.selectable(SelectionKind::Info);
     }
 
-    let width = tab_bar_width(content_width(area)) as u16;
-    let mut x = area.x + (area.width.saturating_sub(width)) / 2 + 1;
-    for tab in Tab::ALL {
-        let label = tab.label().chars().count() as u16 + 2;
-        if column >= x && column < x + label {
-            return Some(tab);
+    body.blank();
+    body.push(section(" projects:", width, theme));
+    body.blank();
+    body.push(row(" root:", &format!("{} ", projects::default_root().display()), width, shade(0, theme)));
+    body.selectable(SelectionKind::Info);
+    body.push(row(" socket:", &format!("{} ", context.socket.display()), width, shade(1, theme)));
+    body.selectable(SelectionKind::Info);
+}
+
+fn display(body: &mut Body, context: &Context, width: usize) {
+    let theme = context.theme;
+
+    body.blank();
+    body.push(section(" themes:", width, theme));
+    body.blank();
+    for (index, preset) in THEME_PRESETS.iter().enumerate() {
+        let marker = if preset.theme.name == theme.name { RADIO_ON } else { RADIO_OFF };
+        body.push(row(&format!(" {}", preset.label), &format!("{marker} "), width, shade(index, theme)));
+        body.selectable(SelectionKind::Theme(index));
+    }
+}
+
+fn profiles(body: &mut Body, context: &Context, width: usize) {
+    let theme = context.theme;
+    let plain = Style::default().fg(theme.COLOR_TEXT);
+
+    body.blank();
+    body.push(section(" profiles:", width, theme));
+    body.blank();
+    body.push(row(" actions:", "select to manage | + add to create ", width, plain));
+    body.blank();
+
+    body.push(row(" + add profile", "(enter) ", width, Style::default().fg(theme.COLOR_GRASS).bg(theme.background_or_default(theme.COLOR_GREY_900))));
+    body.selectable(SelectionKind::AddProfile);
+
+    if context.profiles.is_empty() {
+        body.push(row("  none yet -- atrium is offering the CLIs it knows", "", width, plain));
+        return;
+    }
+
+    // One name column across every row, so the directories line up under each
+    // other rather than each row finding its own edge.
+    let name_width = context.profiles.profiles.iter().map(|profile| profile.name.chars().count()).max().unwrap_or(0);
+
+    for (index, profile) in context.profiles.profiles.iter().enumerate() {
+        let is_default = index == context.default_profile;
+        let marker = if is_default { RADIO_ON } else { RADIO_OFF };
+        let mut style = Style::default().fg(if is_default { theme.COLOR_GRASS } else { theme.COLOR_TEXT });
+        // Offset by one: the add row above is part of the same run of stripes.
+        if (index + 1).is_multiple_of(2) {
+            style = style.bg(theme.background_or_default(theme.COLOR_GREY_900));
         }
-        x += label + 1;
+
+        let left = format!(" {:<name_width$}   {}", profile.name, profile.config_dir);
+        body.push(row(&truncate_with_ellipsis(&left, width.saturating_sub(4)), &format!("{marker} "), width, style));
+        body.selectable(SelectionKind::Profile(index));
     }
-    None
+}
+
+fn shortcuts(body: &mut Body, context: &Context, width: usize) {
+    let theme = context.theme;
+
+    body.blank();
+    body.push(section(" keys:", width, theme));
+    body.blank();
+    for (index, (action, chord)) in context.keymap.actions().iter().enumerate() {
+        body.push(row(&format!(" {action}"), &format!("{} ", chord.label()), width, shade(index, theme)));
+        body.selectable(SelectionKind::Chord(index));
+    }
 }
 
 #[cfg(test)]

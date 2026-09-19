@@ -29,5 +29,6 @@ themes tab lists all 47 and `enter` applies one. `config.toml` takes a preset
 `COLOR_GREEN`, `COLOR_GREY_400`, `COLOR_GREY_600` — rather than colours of
 atrium's own, so the two tools can never disagree about what red is.
 
-atrium's own accent is `COLOR_PURPLE`, with `COLOR_DURPLE` beneath it: the
-wordmark in [[Settings]] and the `atrium` on the title line.
+atrium's own accent is `COLOR_PURPLE` — the `atrium` on the title line, and the
+lower part of the wordmark in [[Settings]] and on the [[Splash]], whose top 30%
+takes `COLOR_PINK` above it.

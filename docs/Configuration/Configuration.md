@@ -1,32 +1,25 @@
 # Configuration
 
-Three files, in `~/.config/atrium/`. **One of them is yours, two are atrium's.**
+Four files, in `~/.config/atrium/`. **One of them is yours, three are
+atrium's.**
 
 | File | Written by | Holds |
 | --- | --- | --- |
-| `config.toml` | You | Theme name, key bindings, and [[Profiles]] |
+| `config.toml` | You | Theme name and key bindings |
 | `theme.json` | atrium | The actual colours — see [[Themes]] |
 | `layout.json` | atrium | The [[Sidebar]] width |
+| `profiles.json` | atrium | The [[Profiles]], and which is default |
 
 atrium never writes `config.toml`. A config that rewrites itself is a config you
-cannot keep in a dotfiles repo.
+cannot keep in a dotfiles repo — which is exactly why profiles are not in it any
+more: they are edited in [[Settings]], and a TOML rewrite would drop your
+comments and reformat everything around them.
 
 ## config.toml
 
 All of it optional:
 
 ```toml
-default = "work"           # which profile a bare `atrium` holds
-
-[[profiles]]
-name = "work"
-config_dir = "~/.claude-work"
-args = ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"]
-
-[[profiles]]
-name = "personal"
-config_dir = "~/.claude-personal"
-
 [theme]
 name = "one dark warmer"   # any of the 47 preset names
 
@@ -42,8 +35,11 @@ previous = "ctrl+p"
 ```
 
 See [[Keys]] for how a chord is written, and for the constraint that a binding
-has to be one a terminal can actually deliver. See [[Profiles]] for what a
-profile block can say — including that `~` and `$VAR` are expanded in it.
+has to be one a terminal can actually deliver.
+
+A file that still carries a `[[profiles]]` block or a `default` is **told where
+they went** rather than having them silently ignored — `--check-config` names
+both.
 
 Anything the file gets wrong is **kept rather than discarded**, so it can be
 reported instead of failing silently. The TUI carries on with the defaults.
@@ -60,6 +56,18 @@ Written when a drag settles — see [[Mouse]]. A file that is missing, unreadabl
 or malformed is not a problem: the defaults are a perfectly good answer, and a
 bad one is overwritten by the next drag. Nothing here is worth failing over —
 losing a dragged width costs one drag, taking atrium down over it costs an agent.
+
+## profiles.json
+
+```json
+{ "default": "work",
+  "profiles": [{ "name": "work", "config_dir": "~/.claude-work", "args": [] }] }
+```
+
+Written whenever a profile is added, renamed or deleted in [[Settings]]. Unlike
+the theme and the layout, a failure here is **reported**: it is written in
+answer to something you just did, so silence would look like the edit had
+worked. See [[Profiles]].
 
 ## Checking it
 

@@ -25,6 +25,7 @@ is why the defaults are opinionated and the scope stops where that work stops.
 
 ### Interface
 
+- [[Splash]] — what atrium shows while it holds nothing
 - [[Sidebar]] — the rows, the widths, the scrollbar that is also a divider
 - [[Stage]] — the embedded terminal the agent draws on
 - [[Settings]] — the themes and shortcuts view

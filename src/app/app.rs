@@ -16,7 +16,9 @@ use crate::{
             layout::Layout,
             menu::{Action, Menu},
             picker::Picker,
-            settings::Settings,
+            profile_editor::{Editor, Outcome},
+            settings::{SelectionKind, Settings},
+            splash::Splash,
         },
     },
     core::{
@@ -24,10 +26,14 @@ use crate::{
         config::Config,
         layout_config::{self, LayoutConfig},
         profile::Profile,
+        profiles_file::{self, StoredProfiles},
         projects,
         registry::Registry,
     },
-    helpers::{palette, palette::Theme, scroll, spinner},
+    helpers::{
+        palette::{self, THEME_PRESETS, Theme},
+        scroll, spinner,
+    },
     ipc::server::StatusServer,
 };
 
@@ -42,6 +48,8 @@ pub struct App {
     /// What can be held, and which of them the picker opens on.
     profiles: Vec<Profile>,
     default_profile: usize,
+    /// The profiles as written down, which is what the settings view edits.
+    stored_profiles: StoredProfiles,
     harness: Harness,
     server: StatusServer,
     started: Instant,
@@ -52,6 +60,10 @@ pub struct App {
     settings: Option<Settings>,
     /// Some while a right-click menu is up; it owns the keyboard and the mouse.
     menu: Option<Menu>,
+    /// Some while a profile is being added or changed, over the settings view.
+    profile_editor: Option<Editor>,
+    /// What is shown while nothing is held: the wordmark and what could be.
+    splash: Splash,
     sidebar_visible: bool,
     sidebar_scroll: usize,
     /// How wide the sidebar is asked to be. Remembered across runs.
@@ -98,7 +110,9 @@ fn first_line(message: &str) -> String {
 }
 
 impl App {
-    pub fn new(spec: AgentSpec, config: Config, rows: u16, cols: u16) -> io::Result<Self> {
+    /// `spec` is what to hold straight away. None opens on the splash instead,
+    /// which is what a bare `atrium` does -- nothing was asked for, so it asks.
+    pub fn new(spec: Option<AgentSpec>, config: Config, rows: u16, cols: u16) -> io::Result<Self> {
         let server = StatusServer::bind()?;
         // Agents call back into this same binary, so its path is the one to hand out.
         let harness = Harness { exe: std::env::current_exe()?, socket: server.path().to_path_buf() };
@@ -106,7 +120,10 @@ impl App {
         let sidebar_width = layout_config::load().sidebar_width;
         let stage = layout::compute(Rect::new(0, 0, cols, rows), true, sidebar_width).stage;
         let mut registry = Registry::new();
-        registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
+        if let Some(spec) = spec {
+            registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
+        }
+        let splash = Splash::new(config.profiles.len(), config.default_profile);
 
         Ok(Self {
             registry,
@@ -114,6 +131,7 @@ impl App {
             keymap: config.keymap,
             profiles: config.profiles,
             default_profile: config.default_profile,
+            stored_profiles: config.stored_profiles,
             harness,
             server,
             started: Instant::now(),
@@ -121,7 +139,11 @@ impl App {
             modal: None,
             settings: None,
             menu: None,
-            sidebar_visible: true,
+            profile_editor: None,
+            splash,
+            // Hidden until asked for: one agent is the common case, and a
+            // sidebar listing it alone says nothing the status line does not.
+            sidebar_visible: false,
             sidebar_scroll: 0,
             sidebar_width,
             dragging_sidebar: false,
@@ -169,28 +191,41 @@ impl App {
         // The agent paints its own cells; this is what colours everything it
         // does not reach, so the chrome matches guitar rather than the terminal.
         frame.render_widget(Block::default().style(self.theme.background_style()), frame.area());
-        frame.render_widget(draw::pane::app_frame(&self.theme), layout.app);
 
-        let cwd = self.registry.focused().map_or_else(String::new, |agent| agent.cwd().display().to_string());
-        draw::title::draw(frame, &layout, &self.theme, &cwd, self.view_name());
-
-        if let Some(settings) = &mut self.settings {
-            draw::settings::draw(frame, layout.stage, settings, &self.keymap, &self.theme);
+        // The splash takes the bare terminal: no frame, no title line, no status
+        // line. Nothing is held, so none of them would have anything to say.
+        if self.is_bare() {
+            draw::splash::draw(frame, frame.area(), &self.splash, &self.profiles, &self.theme);
         } else {
-            if let Some(area) = layout.sidebar {
-                self.sidebar_scroll = scroll::trap(self.registry.focus(), self.sidebar_scroll, self.registry.len(), area.height as usize);
-                draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, self.sidebar_scroll);
+            frame.render_widget(draw::pane::app_frame(&self.theme), layout.app);
+
+            let cwd = self.registry.focused().map_or_else(String::new, |agent| agent.cwd().display().to_string());
+            draw::title::draw(frame, &layout, &self.theme, &cwd, self.view_name());
+
+            if let Some(settings) = &mut self.settings {
+                let context = draw::settings::Context { keymap: &self.keymap, theme: &self.theme, profiles: &self.stored_profiles, default_profile: self.default_profile, socket: self.server.path() };
+                draw::settings::draw(frame, layout.stage, layout.app, settings, &context);
+            } else {
+                if let Some(area) = layout.sidebar {
+                    self.sidebar_scroll = scroll::trap(self.registry.focus(), self.sidebar_scroll, self.registry.len(), area.height as usize);
+                    draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, self.sidebar_scroll);
+                }
+                if let Some(agent) = self.registry.focused() {
+                    draw::stage::draw(frame, layout.stage, agent.session(), &self.theme);
+                }
             }
-            if let Some(agent) = self.registry.focused() {
-                draw::stage::draw(frame, layout.stage, agent.session(), &self.theme);
-            }
+            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme);
         }
-        draw::statusbar::draw(frame, &layout, &self.registry, &self.theme);
 
         match &self.modal {
             Some(Modal::NewAgent(picker)) => draw::modals::new_agent::draw(frame, frame.area(), picker, &self.theme),
             Some(Modal::Goto(goto)) => draw::modals::goto::draw(frame, frame.area(), goto, &self.registry, &self.theme, spinner),
             None => {},
+        }
+
+        if let Some(editor) = &self.profile_editor {
+            let name = Editor::name_of(&self.stored_profiles, self.editing_index());
+            draw::modals::profile::draw(frame, frame.area(), editor, &name, &self.theme);
         }
 
         // Last, so it floats over whatever was right-clicked.
@@ -199,10 +234,20 @@ impl App {
         }
     }
 
+    /// True while the splash is what is on screen, which is the one view that
+    /// wears no chrome at all. Settings over an empty registry is not bare: it
+    /// is a view of something, and keeps the frame around it.
+    fn is_bare(&self) -> bool {
+        self.registry.is_empty() && self.settings.is_none()
+    }
+
     /// The settings view takes the whole inside, so it hides the sidebar for as
     /// long as it is open without changing what the sidebar key last said.
     fn layout_for(&self, full: Rect) -> Layout {
-        layout::compute(full, self.sidebar_visible && self.settings.is_none(), self.sidebar_width)
+        // The splash takes the whole inside, the way the settings view does --
+        // there are no rows to put beside it.
+        let sidebar = self.sidebar_visible && self.settings.is_none() && !self.registry.is_empty();
+        layout::compute(full, sidebar, self.sidebar_width)
     }
 
     /// What the top right corner says you are looking at.
@@ -216,6 +261,10 @@ impl App {
     }
 
     fn on_key(&mut self, key: KeyEvent) -> io::Result<()> {
+        if self.profile_editor.is_some() {
+            self.on_editor_key(key);
+            return Ok(());
+        }
         if self.menu.is_some() {
             self.on_menu_key(key);
             return Ok(());
@@ -235,6 +284,11 @@ impl App {
         if self.take_action(&key) {
             return Ok(());
         }
+        // With nothing held there is no agent for a key to reach, so the splash
+        // takes what the chords above did not.
+        if self.registry.is_empty() {
+            return self.on_splash_key(key);
+        }
         self.send(key)
     }
 
@@ -249,7 +303,7 @@ impl App {
         } else if keymap.dismiss.matches(key) {
             self.dismiss();
         } else if keymap.settings.matches(key) {
-            self.settings = Some(Settings::new(&self.theme));
+            self.settings = Some(Settings::new());
         } else if keymap.sidebar.matches(key) {
             self.sidebar_visible = !self.sidebar_visible;
         } else if keymap.goto.matches(key) {
@@ -302,6 +356,10 @@ impl App {
             self.on_modal_mouse(mouse);
             return Ok(());
         }
+        if self.registry.is_empty() {
+            self.on_splash_mouse(mouse, layout.full);
+            return Ok(());
+        }
         if let Some(sidebar) = layout.sidebar
             && within(sidebar, at)
         {
@@ -349,10 +407,12 @@ impl App {
             MouseEventKind::ScrollDown => settings.move_down(),
             MouseEventKind::ScrollUp => settings.move_up(),
             MouseEventKind::Down(MouseButton::Left) => {
-                if let Some(tab) = draw::settings::tab_at(settings, area, mouse.column, mouse.row) {
-                    settings.open(tab);
-                } else if let Some(index) = draw::settings::row_at(settings, area, mouse.row) {
-                    settings.select(index);
+                // Measured against the line the last draw put there, so a click
+                // lands on what was painted rather than on recomputed geometry.
+                let line = settings.scroll + usize::from(mouse.row.saturating_sub(area.y));
+                match settings.tab_at(line, mouse.column) {
+                    Some(tab) => settings.open(tab),
+                    None => settings.select_line(line),
                 }
             },
             _ => {},
@@ -379,24 +439,136 @@ impl App {
     /// The settings view owns the keyboard while it is open, the same way a
     /// modal does -- nothing reaches the agent behind it.
     fn on_settings_key(&mut self, key: KeyEvent) {
-        let Some(settings) = &mut self.settings else {
+        // Closing is settled before the borrow below, so the rest of this can
+        // work on the state without having to hand it back first.
+        if key.code == KeyCode::Esc {
+            self.settings = None;
             return;
+        }
+
+        let chosen = {
+            let Some(settings) = &mut self.settings else {
+                return;
+            };
+            match key.code {
+                KeyCode::Tab | KeyCode::Right => settings.next_tab(),
+                KeyCode::BackTab | KeyCode::Left => settings.previous_tab(),
+                KeyCode::Char('j') | KeyCode::Down => settings.move_down(),
+                KeyCode::Char('k') | KeyCode::Up => settings.move_up(),
+                KeyCode::Enter => return self.settle_cursor(),
+                _ => {},
+            }
+            None
         };
-        match key.code {
-            KeyCode::Esc => self.settings = None,
-            KeyCode::Tab | KeyCode::Right => settings.next_tab(),
-            KeyCode::BackTab | KeyCode::Left => settings.previous_tab(),
-            KeyCode::Char('j') | KeyCode::Down => settings.move_down(),
-            KeyCode::Char('k') | KeyCode::Up => settings.move_up(),
-            KeyCode::Enter => {
-                if let Some(theme) = settings.theme_under_cursor() {
-                    self.theme = theme;
+        self.settle_setting(chosen);
+    }
+
+    /// Enter, worked out and then acted on in two steps so the settings state
+    /// is not still borrowed when the theme changes under it.
+    fn settle_cursor(&mut self) {
+        let chosen = self.settings.as_ref().and_then(|settings| settings.kind_at_cursor().cloned());
+        self.settle_setting(chosen);
+    }
+
+    /// Acts on whatever the cursor was sitting on, once the borrow on the
+    /// settings state is gone.
+    fn settle_setting(&mut self, kind: Option<SelectionKind>) {
+        match kind {
+            Some(SelectionKind::Theme(index)) => {
+                if let Some(preset) = THEME_PRESETS.get(index) {
+                    self.theme = preset.theme;
                     // Written to atrium's own theme.json, never guitar's.
-                    palette::save_theme(&theme);
+                    palette::save_theme(&preset.theme);
                 }
             },
+            Some(SelectionKind::AddProfile) => self.profile_editor = Some(Editor::add()),
+            Some(SelectionKind::Profile(index)) => self.profile_editor = Some(Editor::manage(index)),
+            // Info rows and chords can be landed on but do nothing: paths are
+            // there to be read, and a chord is rebound in the config file.
             _ => {},
         }
+    }
+
+    /// Which profile the editor is working on, for the name in its title.
+    fn editing_index(&self) -> usize {
+        match &self.profile_editor {
+            Some(editor) => editor.index().unwrap_or(0),
+            None => 0,
+        }
+    }
+
+    /// While the editor is up it owns the keyboard, the way every modal here
+    /// does -- nothing reaches the settings view behind it, let alone an agent.
+    fn on_editor_key(&mut self, key: KeyEvent) {
+        let outcome = {
+            let Some(editor) = &mut self.profile_editor else {
+                return;
+            };
+            match key.code {
+                KeyCode::Esc => editor.cancel(),
+                KeyCode::Enter => editor.confirm(&self.stored_profiles),
+                KeyCode::Down => {
+                    editor.move_down();
+                    Outcome::Continue
+                },
+                KeyCode::Up => {
+                    editor.move_up();
+                    Outcome::Continue
+                },
+                KeyCode::Backspace => {
+                    editor.backspace();
+                    Outcome::Continue
+                },
+                KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    editor.push(c);
+                    Outcome::Continue
+                },
+                _ => Outcome::Continue,
+            }
+        };
+        self.settle_editor(outcome);
+    }
+
+    /// Applies what the editor asked for, writes it, and takes up the result.
+    /// A refusal stays in the modal rather than closing it, so the answer can
+    /// be corrected without starting again.
+    fn settle_editor(&mut self, outcome: Outcome) {
+        let Outcome::Commit(apply) = outcome else {
+            if matches!(outcome, Outcome::Close) {
+                self.profile_editor = None;
+            }
+            return;
+        };
+
+        let mut profiles = self.stored_profiles.clone();
+        match apply(&mut profiles).and_then(|()| profiles_file::save(&profiles)) {
+            Ok(()) => {
+                self.adopt_profiles(profiles);
+                self.profile_editor = None;
+            },
+            Err(message) => {
+                if let Some(editor) = &mut self.profile_editor {
+                    editor.fail(message);
+                }
+            },
+        }
+    }
+
+    /// The splash offers whatever is configured, so an edited set changes it.
+    fn refresh_splash(&mut self) {
+        if self.registry.is_empty() {
+            self.splash = Splash::new(self.profiles.len(), self.default_profile);
+        }
+    }
+
+    /// Takes up an edited set: the picker and every later spawn see it at once,
+    /// without atrium having to be restarted.
+    fn adopt_profiles(&mut self, stored: StoredProfiles) {
+        let (profiles, default_profile) = stored.resolve();
+        self.profiles = profiles;
+        self.default_profile = default_profile;
+        self.stored_profiles = stored;
+        self.refresh_splash();
     }
 
     fn open_picker(&mut self) {
@@ -489,10 +661,53 @@ impl App {
         self.dismiss_at(self.registry.focus());
     }
 
+    /// Closing the last agent falls back to the splash rather than ending
+    /// atrium; `quit` is how you leave.
     fn dismiss_at(&mut self, index: usize) {
         self.registry.dismiss_at(index);
         if self.registry.is_empty() {
-            self.should_quit = true;
+            self.splash = Splash::new(self.profiles.len(), self.default_profile);
+        }
+    }
+
+    fn on_splash_mouse(&mut self, mouse: MouseEvent, area: Rect) {
+        match mouse.kind {
+            MouseEventKind::ScrollDown => self.splash.move_down(),
+            MouseEventKind::ScrollUp => self.splash.move_up(),
+            MouseEventKind::Down(MouseButton::Left) => {
+                // A click on a harness holds it: the list exists to be picked
+                // from, so selecting and then confirming would be two steps for
+                // one intention.
+                let first = draw::splash::first_row(area, &self.splash, self.profiles.len());
+                if let Some(index) = self.splash.row_at(first, mouse.row) {
+                    self.hold_from_splash(index);
+                }
+            },
+            _ => {},
+        }
+    }
+
+    fn on_splash_key(&mut self, key: KeyEvent) -> io::Result<()> {
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => self.splash.move_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.splash.move_up(),
+            KeyCode::Enter => self.hold_from_splash(self.splash.selected()),
+            _ => {},
+        }
+        Ok(())
+    }
+
+    /// Holds the chosen profile where atrium was started, which is what a bare
+    /// `atrium` used to do without asking.
+    fn hold_from_splash(&mut self, index: usize) {
+        let Some(profile) = self.profiles.get(index).cloned() else {
+            return;
+        };
+        let cwd = std::env::current_dir().unwrap_or_else(|_| ".".into());
+
+        match Agent::spawn(&AgentSpec::from_profile(&profile, cwd), &self.harness, self.stage.height, self.stage.width) {
+            Ok(agent) => self.registry.push(agent),
+            Err(error) => self.splash.error = Some(first_line(&error.to_string())),
         }
     }
 
@@ -602,7 +817,7 @@ impl App {
             Action::Dismiss(index) => self.dismiss_at(index),
             Action::New => self.open_picker(),
             Action::Sidebar => self.sidebar_visible = !self.sidebar_visible,
-            Action::Settings => self.settings = Some(Settings::new(&self.theme)),
+            Action::Settings => self.settings = Some(Settings::new()),
             Action::Quit => self.should_quit = true,
             Action::Separator => {},
         }

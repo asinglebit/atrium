@@ -1,5 +1,11 @@
 use super::*;
-use crate::{app::input::keymap::Chord, core::profile};
+use crate::{
+    app::input::keymap::Chord,
+    core::{
+        profile,
+        profiles_file::{StoredProfile, StoredProfiles},
+    },
+};
 use crossterm::event::KeyCode;
 
 #[test]
@@ -105,23 +111,8 @@ fn unrelated_sections_are_left_alone() {
     assert!(config.problems.is_empty(), "atrium should not complain about a section it does not own");
 }
 
-/// The two subscriptions this was built for, written the way the shell aliases
-/// they replace were written.
-const SUBSCRIPTIONS: &str = r#"
-default = "personal"
-
-[[profiles]]
-name = "work"
-config_dir = "~/.claude-work"
-args = ["--append-system-prompt-file", "/etc/prompt.md"]
-
-[[profiles]]
-name = "personal"
-config_dir = "~/.claude-personal"
-"#;
-
 #[test]
-fn a_file_with_no_profiles_offers_the_clis_atrium_knows() {
+fn with_no_profiles_file_it_offers_the_clis_atrium_knows() {
     let config = Config::parse("");
 
     assert_eq!(config.profiles, profile::defaults());
@@ -129,90 +120,35 @@ fn a_file_with_no_profiles_offers_the_clis_atrium_knows() {
 }
 
 #[test]
-fn profiles_replace_the_built_in_list_rather_than_joining_it() {
-    let config = Config::parse(SUBSCRIPTIONS);
+fn profiles_come_from_the_file_atrium_writes() {
+    let mut config = Config::parse("");
+    config.adopt(StoredProfiles { default: "personal".to_owned(), profiles: vec![StoredProfile::named("work"), StoredProfile::named("personal")] });
 
     let names: Vec<&str> = config.profiles.iter().map(|entry| entry.name.as_str()).collect();
     assert_eq!(names, ["work", "personal"]);
-    assert!(config.problems.is_empty(), "{:?}", config.problems);
-}
-
-#[test]
-fn a_config_dir_becomes_the_variable_that_selects_a_subscription() {
-    let config = Config::parse(SUBSCRIPTIONS);
-    let work = config.profile_named("work").expect("work");
-
-    assert_eq!(work.env.first().map(|(key, _)| key.as_str()), Some(profile::CONFIG_DIR_ENV));
-    assert!(work.config_dir().is_some_and(|dir| dir.ends_with("/.claude-work")), "{:?}", work.config_dir());
-    assert!(!work.config_dir().unwrap().starts_with('~'), "the tilde should have been expanded");
-}
-
-#[test]
-fn a_profile_launches_claude_unless_it_says_otherwise() {
-    let config = Config::parse("[[profiles]]\nname = \"work\"\n\n[[profiles]]\nname = \"review\"\nprogram = \"codex\"");
-
-    assert_eq!(config.profile_named("work").unwrap().program, "claude");
-    assert_eq!(config.profile_named("review").unwrap().program, "codex");
-}
-
-#[test]
-fn args_are_carried_through_in_order() {
-    let config = Config::parse(SUBSCRIPTIONS);
-
-    assert_eq!(config.profile_named("work").unwrap().args, ["--append-system-prompt-file", "/etc/prompt.md"]);
-    assert!(config.profile_named("personal").unwrap().args.is_empty());
-}
-
-#[test]
-fn the_default_names_which_profile_a_bare_atrium_holds() {
-    let config = Config::parse(SUBSCRIPTIONS);
-
     assert_eq!(config.default_profile().name, "personal");
+    assert!(config.profile_named("work").is_some());
 }
 
 #[test]
-fn a_default_naming_nothing_is_reported_rather_than_fatal() {
-    let config = Config::parse("default = \"nope\"\n\n[[profiles]]\nname = \"work\"");
+fn adopting_expands_what_the_file_stored_raw() {
+    let mut config = Config::parse("");
+    config.adopt(StoredProfiles { default: String::new(), profiles: vec![StoredProfile::named("work")] });
 
-    assert_eq!(config.default_profile().name, "work", "it should still hold something");
-    assert!(config.problems.iter().any(|problem| problem.contains("no profile named")), "{:?}", config.problems);
+    let dir = config.profile_named("work").and_then(|entry| entry.config_dir().map(str::to_owned)).expect("a config dir");
+    assert!(!dir.starts_with('~'), "the launchable form should be expanded, got {dir:?}");
 }
 
 #[test]
-fn a_profile_with_no_name_is_reported_and_skipped() {
-    let config = Config::parse("[[profiles]]\nconfig_dir = \"/tmp/x\"\n\n[[profiles]]\nname = \"work\"");
+fn a_config_file_still_holding_profiles_is_told_they_moved() {
+    let config = Config::parse("default = \"work\"\n\n[[profiles]]\nname = \"work\"");
 
-    assert_eq!(config.profiles.len(), 1, "the nameless one cannot be picked, so it is not offered");
-    assert!(config.problems.iter().any(|problem| problem.contains("needs a `name`")), "{:?}", config.problems);
+    assert!(config.problems.iter().any(|problem| problem.starts_with("profiles:")), "{:?}", config.problems);
+    assert!(config.problems.iter().any(|problem| problem.starts_with("default:")), "{:?}", config.problems);
+    assert!(config.problems.iter().any(|problem| problem.contains("profiles.json")), "it should say where they went: {:?}", config.problems);
 }
 
 #[test]
-fn a_file_whose_profiles_are_all_unusable_keeps_the_built_in_list() {
-    let config = Config::parse("[[profiles]]\nconfig_dir = \"/tmp/x\"");
-
-    assert_eq!(config.profiles, profile::defaults(), "offering nothing would leave no way to hold anything");
-    assert!(!config.problems.is_empty());
-}
-
-#[test]
-fn a_misspelled_profile_setting_is_named() {
-    let config = Config::parse("[[profiles]]\nname = \"work\"\nconfigdir = \"/tmp/x\"");
-
-    assert!(config.problems.iter().any(|problem| problem.contains("profiles.work.configdir")), "{:?}", config.problems);
-}
-
-#[test]
-fn a_setting_of_the_wrong_shape_is_reported_rather_than_ignored() {
-    let config = Config::parse("[[profiles]]\nname = \"work\"\nargs = \"--flag\"\nconfig_dir = 7");
-
-    assert!(config.problems.iter().any(|problem| problem.contains("profiles.work.args")), "{:?}", config.problems);
-    assert!(config.problems.iter().any(|problem| problem.contains("profiles.work.config_dir")), "{:?}", config.problems);
-    assert_eq!(config.profile_named("work").map(|entry| entry.name.as_str()), Some("work"), "the rest of it is still usable");
-}
-
-#[test]
-fn an_env_table_carries_anything_a_config_dir_cannot() {
-    let config = Config::parse("[[profiles]]\nname = \"work\"\nenv = { ANTHROPIC_LOG = \"debug\" }");
-
-    assert_eq!(config.profile_named("work").unwrap().env, [("ANTHROPIC_LOG".to_owned(), "debug".to_owned())]);
+fn a_config_file_that_never_mentioned_them_says_nothing() {
+    assert!(Config::parse("[theme]\nname = \"ansi\"").problems.is_empty());
 }

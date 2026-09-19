@@ -21,8 +21,9 @@ kills it. Two details:
 - The focus is then clamped, so it always points at something while anything is
   left.
 
-`dismiss_focused` is just `dismiss_at(focus)`. Dropping the last agent ends
-atrium: it exists to hold them, so holding none leaves nothing to show.
+`dismiss_focused` is just `dismiss_at(focus)`. Dropping the last agent leaves
+the registry empty, which is not the end: atrium falls back to the [[Splash]]
+and waits to be told what to hold next. `quit` is how you leave.
 
 ## Work done every frame
 

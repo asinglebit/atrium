@@ -56,5 +56,9 @@ all; it is only dropped entirely below 56 columns of interior. Drag the divider
 to set it — see [[Mouse]] — and the width is remembered in `layout.json`, see
 [[Configuration]].
 
-`ctrl+o` hides and shows it. The [[Settings]] view hides it for as long as it is
-open, without changing what that key last said.
+**It starts hidden.** One agent is the common case, and a row listing it alone
+says nothing the status line does not. `ctrl+o` brings it in, at whatever width
+you last dragged it to.
+
+The [[Settings]] view and the [[Splash]] hide it for as long as they are up,
+without changing what that key last said — neither has rows to put beside it.

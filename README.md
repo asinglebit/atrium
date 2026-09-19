@@ -55,11 +55,18 @@ because agents call back into it by absolute path — see below.
 ## Use
 
 ```sh
-atrium                    # hold the default profile here
-atrium --profile personal # hold a different one
-atrium bash --norc        # hold anything else, with no profile at all
+atrium                    # open on the splash and pick a harness
+atrium --profile personal # skip it and hold that one here
+atrium bash --norc        # skip it and hold anything else, no profile at all
 atrium --check-config     # what the config says, and what it got wrong
 ```
+
+Started with nothing to go on, atrium **opens on a splash** listing what it can
+hold — the harnesses from `profiles.json`, plus the CLIs it knows. Enter holds
+the selected one in the directory you started in. Given `--profile` or a
+command, it skips the splash and holds that, because you already said.
+
+The sidebar starts hidden; `ctrl+o` brings it in.
 
 Everything you type goes to the focused agent, except these, which fire
 directly — there is no leader to press first:
@@ -67,7 +74,7 @@ directly — there is no leader to press first:
 | | |
 | --- | --- |
 | `ctrl+t` | hold a new agent — pick a project, `tab` picks the profile |
-| `ctrl+x` | close this one; closing the last ends atrium |
+| `ctrl+x` | close this one; closing the last goes back to the splash |
 | `ctrl+n` / `ctrl+p` | next / previous |
 | `ctrl+g` | go to, where `1`…`9` jump straight to a row |
 | `ctrl+o` | show or hide the sidebar |
@@ -85,18 +92,6 @@ on, so the agent's own mouse support keeps working.
 `~/.config/atrium/config.toml`, all of it optional:
 
 ```toml
-default = "work"           # which profile a bare `atrium` holds
-
-[[profiles]]
-name = "work"
-config_dir = "~/.claude-work"
-args = ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"]
-
-[[profiles]]
-name = "personal"
-config_dir = "~/.claude-personal"
-args = ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"]
-
 [theme]
 name = "one dark warmer"   # any of guitar's ~30 preset names
 
@@ -111,12 +106,13 @@ next = "ctrl+n"
 previous = "ctrl+p"
 ```
 
-A **profile** is a CLI plus what it needs to be launched with. `config_dir` is
-shorthand for `CLAUDE_CONFIG_DIR`, so a Claude subscription is one profile —
-`env = { … }` covers anything else, `program` defaults to `claude`, and both
-`~` and `$VAR` expand so a path can be pasted straight out of a shell alias.
-With no `[[profiles]]` at all you get `claude`, `opencode` and `codex`, exactly
-as before. Inside `ctrl+t`, `tab` cycles them.
+**Profiles are not in here.** A profile is a CLI plus what it needs to be
+launched with — for a Claude subscription, a `CLAUDE_CONFIG_DIR` and a flag or
+two. They are added, renamed and deleted in `ctrl+s` → profiles, and atrium
+keeps them in `profiles.json` of its own, because rewriting `config.toml` would
+lose your comments. `~` and `$VAR` are stored as you type them and expanded only
+on the way to an agent, so the file stays portable. With none configured you get
+`claude`, `opencode` and `codex`. Inside `ctrl+t`, `tab` cycles them.
 
 Themes are easier picked than typed: `ctrl+s` opens settings, where the themes
 tab lists all thirty and Enter applies one. Individual colours are **not** set
@@ -136,6 +132,10 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/core/git.rs` | Branch and dirty flag for a sidebar row |
 | `src/core/config.rs` | Reads `config.toml`, keeping a list of what it got wrong |
 | `src/core/profile.rs` | A named launch recipe — program, args, environment — and the `~`/`$VAR` expansion |
+| `src/core/profiles_file.rs` | `profiles.json`: the profiles as written down, and adding, renaming and deleting them |
+| `src/app/state/profile_editor.rs` | The add/manage/delete flow behind the profiles tab |
+| `src/app/draw/splash.rs` | What atrium shows while it holds nothing: the wordmark, and what it could hold |
+| `src/helpers/logo.rs` | The wordmark, in three sizes |
 | `src/core/layout_config.rs` | The one thing atrium writes back: the sidebar's width, in `layout.json` |
 | `src/adapters/` | Per-CLI launch and status wiring — `claude`, and stubs for `opencode` and `codex` |
 | `src/ipc/server.rs` | The unix socket agents report back through |
@@ -143,7 +143,6 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/app/draw/` | The sidebar, the stage, the settings view, the menu and the modals |
 | `src/app/state/layout.rs` | Where the sidebar, stage, title line and status line go |
 | `src/app/state/menu.rs` | What the right-click menu offers, and where its box lands |
-| `src/helpers/logo.rs` | The wordmark the settings view is headed with |
 | `src/app/input/keys.rs` | Turns a crossterm key into the bytes a terminal would have sent |
 | `src/tests/` | Mirrors the tree above; attached with `#[path]` from each source file |
 
@@ -179,6 +178,18 @@ written `ctrl+]` can never match. Outside a letter a terminal has a byte for
 almost nothing, which is the same fact behind `ctrl+1`..`ctrl+9` below. A test
 now asserts every default is a ctrl **letter**.
 
+**Holding nothing is a state now, not the end.** atrium used to spawn an agent
+before it drew a frame, and closing the last one exited — which meant the only
+way to choose a harness was to have said so on the command line. It now opens
+on guitar's splash with the profiles where guitar lists recent repositories, and
+closing the last agent returns there rather than quitting. `ctrl+q` is how you
+leave. Nothing was lost: `--profile` and a named command still skip it, because
+both already said what they wanted.
+
+**The sidebar starts hidden.** One agent is the common case, and a sidebar
+listing one row says nothing the status line does not already say. `ctrl+o`
+brings it in, and the width it opens at is still the one you last dragged.
+
 **A subscription is an environment variable, so it is a profile rather than a
 special case.** `clw` and `clp` were shell aliases setting `CLAUDE_CONFIG_DIR`
 and adding a system-prompt flag — nothing atrium could reach, because an
@@ -188,6 +199,35 @@ carries environment too, which is all a subscription ever was. The picker's
 that already existed does the job and the modal gained no new key. A profile
 whose name is its program renders as just `claude`, and tags no row — otherwise
 every row would carry the same word and say nothing.
+
+**Profiles live in a file atrium writes, which is why they are not in
+`config.toml`.** They started there, and moved as soon as they became editable
+in the settings view: a TOML rewrite drops the comments and reformats
+everything else in the file, so a config you hand-write and a config atrium
+edits cannot be the same file. `profiles.json` joins `theme.json` and
+`layout.json` as files atrium owns. What it stores is **raw** — `~/.claude-work`
+stays `~/.claude-work` on disk and is expanded on the way to a child process,
+because saving the expanded form would quietly hardcode one machine's home
+directory. A `config.toml` that still carries the old block is told where they
+went rather than silently ignored.
+
+**The settings view is guitar's, copied rather than imitated.** It was written
+from scratch first and only resembled guitar from a distance: 48 columns
+against its 106, dots where guitar pads with spaces, `…` where guitar elides
+with `...`, and a cursor that indexed rows rather than lines. It now takes
+guitar's shape outright — `fill_width` rows, alternate shading, blank/heading/
+blank between sections, a tab bar that collapses to one `•` per tab when the
+column narrows, and the scrollbar on the frame's own border. The one thing not
+copied is the width formula: guitar's is `(pane - 1 - 8 - 2) / 2 * 2`, and two
+of those terms exist only because its heatmap cells are two columns wide.
+atrium keeps the 8-column margin and the 106 ceiling and drops the rest.
+
+**The cursor addresses lines, not rows, and snaps.** Headings and blanks are
+lines too. Moving nudges the cursor by one and the next draw lands it on
+something selectable — the next one *in the direction it was going*, and failing
+that the nearest. Indexing only the selectable rows would have been simpler and
+is what atrium did before; it makes a click on a heading unrepresentable and the
+snap impossible, which is what made j/k feel like it was sticking.
 
 **The stage needed the theme painted back on, one cell at a time.** An embedded
 terminal writes `Color::Reset` for anything the agent never coloured, and the
@@ -223,12 +263,17 @@ and none at all once the sidebar was hidden. On a row the menu offers that
 agent by name; anywhere else it offers what can be done regardless. It quotes
 the chord beside each entry, so it doubles as the place the keys are learnt.
 
-**The logo is purple, and it stands where guitar's heatmap stands.** guitar
-heads its settings with a contribution graph and lines every row up to its
-width; atrium has no commits to plot, so the wordmark takes that place and the
-column lines up to it. The two purples split across the rows the way guitar
-splits its own logo across two greens, and the `atrium` in the title line is the
-brighter of them.
+**The wordmark lightens at the top, and the share is counted over the rows that
+carry ink.** The top 30% take `COLOR_PINK` and the rest `COLOR_PURPLE`, which is
+guitar splitting its own logo across two greens, in atrium's colours. The wide
+wordmark opens with a **blank** row, though, and counting that one would spend a
+third of the lighter tone on a row that paints nothing — leaving the pink on the
+dot of the `i` and nothing else. Counting from the first row with ink in it puts
+the lighter tone on the tops of the letters, which is where it reads.
+
+It also stands where guitar's heatmap stands: guitar heads its settings with a
+contribution graph and lines every row up to its width, and atrium has no
+commits to plot.
 
 Nothing above atrium contends for these: sway is `Super+…` only, ghostty is
 `ctrl+shift+…`, and tmux claims `C-a` plus thirteen prefix-less `M-` bindings —

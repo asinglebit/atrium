@@ -5,11 +5,13 @@ pub mod draw {
     pub mod modals {
         pub mod goto;
         pub mod new_agent;
+        pub mod profile;
     }
     pub mod menu;
     pub mod pane;
     pub mod settings;
     pub mod sidebar;
+    pub mod splash;
     pub mod stage;
     pub mod statusbar;
     pub mod title;
@@ -25,5 +27,7 @@ pub mod state {
     pub mod layout;
     pub mod menu;
     pub mod picker;
+    pub mod profile_editor;
     pub mod settings;
+    pub mod splash;
 }
