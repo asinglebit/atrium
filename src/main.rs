@@ -27,8 +27,7 @@ OPTIONS
 KEYS
     Actions fire directly; every other key reaches the focused agent.
     ctrl+t  hold a new agent     ctrl+n / ctrl+p  next / previous
-    ctrl+]  dismiss this one     ctrl+1..9        jump, terminal permitting
-    ctrl+q  quit
+    ctrl+]  dismiss this one     ctrl+q           quit
 
     Untouched, so the agent keeps them: ctrl+c, ctrl+d, ctrl+z, ctrl+v,
     ctrl+x, ctrl+l, ctrl+r, ctrl+u, ctrl+w, ctrl+a, ctrl+e, ctrl+k, esc.

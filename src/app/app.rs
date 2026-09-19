@@ -40,18 +40,6 @@ pub struct App {
     should_quit: bool,
 }
 
-/// `ctrl+1`..`ctrl+9` jumps straight to a row, on the terminals that can encode
-/// it -- most cannot, so this is a shortcut rather than the way around.
-fn jump_target(key: &KeyEvent) -> Option<usize> {
-    if !key.modifiers.contains(KeyModifiers::CONTROL) {
-        return None;
-    }
-    match key.code {
-        KeyCode::Char(c @ '1'..='9') => Some(c as usize - '1' as usize),
-        _ => None,
-    }
-}
-
 /// Spawn failures arrive as a paragraph naming every directory on PATH; only
 /// the first line says anything the reader needs.
 fn first_line(message: &str) -> String {
@@ -141,8 +129,6 @@ impl App {
             self.registry.focus_next();
         } else if keymap.previous.matches(key) {
             self.registry.focus_prev();
-        } else if let Some(index) = jump_target(key) {
-            self.registry.focus_at(index);
         } else {
             return false;
         }
