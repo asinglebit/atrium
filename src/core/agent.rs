@@ -1,11 +1,18 @@
 use std::{
     io,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use portable_pty::CommandBuilder;
 
-use crate::core::pty::PtySession;
+use crate::{
+    adapters::{self, StatusSource, Wiring},
+    core::pty::PtySession,
+};
+
+/// Agent ids only have to be unique within one atrium, which a counter gives.
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// What an agent is doing. Only `Idle` and `Exited` are produced for now; the
 /// rest are what the hook feed will set once it exists.
@@ -26,6 +33,19 @@ impl Status {
             Self::NeedsInput => "●",
             Self::Error => "✗",
             Self::Exited => "·",
+        }
+    }
+
+    /// The status a Claude hook event means. Unknown events are ignored rather
+    /// than guessed at.
+    pub fn from_hook_event(event: &str) -> Option<Self> {
+        match event {
+            "SessionStart" | "Stop" => Some(Self::Idle),
+            "UserPromptSubmit" => Some(Self::Working),
+            "Notification" | "PermissionRequest" => Some(Self::NeedsInput),
+            "StopFailure" => Some(Self::Error),
+            "SessionEnd" => Some(Self::Exited),
+            _ => None,
         }
     }
 
@@ -68,17 +88,37 @@ impl AgentSpec {
     }
 }
 
+/// The parts of the wiring that are identical for every agent in one atrium.
+#[derive(Clone, Debug)]
+pub struct Harness {
+    pub exe: PathBuf,
+    pub socket: PathBuf,
+}
+
 pub struct Agent {
+    pub id: u64,
     pub name: String,
     pub cwd: PathBuf,
     pub status: Status,
+    source: StatusSource,
     session: PtySession,
 }
 
 impl Agent {
-    pub fn spawn(spec: &AgentSpec, rows: u16, cols: u16) -> io::Result<Self> {
-        let session = PtySession::spawn(spec.command(), rows, cols)?;
-        Ok(Self { name: spec.name(), cwd: spec.cwd.clone(), status: Status::Idle, session })
+    pub fn spawn(spec: &AgentSpec, harness: &Harness, rows: u16, cols: u16) -> io::Result<Self> {
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        let kind = adapters::detect(&spec.program);
+
+        let mut cmd = spec.command();
+        kind.instrument(&mut cmd, &Wiring { exe: harness.exe.clone(), socket: harness.socket.clone(), agent_id: id });
+
+        let session = PtySession::spawn(cmd, rows, cols)?;
+        Ok(Self { id, name: spec.name(), cwd: spec.cwd.clone(), status: Status::Idle, source: kind.status_source(), session })
+    }
+
+    /// Whether this agent can say what it is doing, or only whether it is alive.
+    pub fn status_source(&self) -> StatusSource {
+        self.source
     }
 
     pub fn session(&self) -> &PtySession {
@@ -105,7 +145,22 @@ impl Agent {
         }
     }
 
+    /// An agent that has already exited stays exited: a hook that arrives late
+    /// must not bring a dead row back to life.
+    pub fn apply_event(&mut self, event: &str) {
+        if self.status == Status::Exited {
+            return;
+        }
+        if let Some(status) = Status::from_hook_event(event) {
+            self.status = status;
+        }
+    }
+
     pub fn has_exited(&self) -> bool {
         self.status == Status::Exited
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/core/agent.rs"]
+mod tests;

@@ -6,10 +6,10 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState},
 };
 
-use crate::core::registry::Registry;
+use crate::core::{agent::Status, registry::Registry};
 
 /// Draws the held agents, one row each, with the focused row highlighted.
-pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry) {
+pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry, spinner: char) {
     let items: Vec<ListItem> = registry
         .agents()
         .iter()
@@ -18,7 +18,9 @@ pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry) {
             // Only the first nine get a jump key, so only they are numbered.
             let key = if index < 9 { format!("{} ", index + 1) } else { "  ".to_owned() };
             let style = if agent.has_exited() { Style::default().add_modifier(Modifier::DIM) } else { Style::default() };
-            ListItem::new(Line::from(vec![Span::raw(format!(" {} ", agent.status.glyph())), Span::raw(key), Span::raw(agent.name.clone())])).style(style)
+            // A working agent spins where the others show a steady glyph.
+            let mark = if agent.status == Status::Working { spinner.to_string() } else { agent.status.glyph().to_owned() };
+            ListItem::new(Line::from(vec![Span::raw(format!(" {mark} ")), Span::raw(key), Span::raw(agent.name.clone())])).style(style)
         })
         .collect();
 

@@ -1,4 +1,7 @@
-use std::{io, time::Duration};
+use std::{
+    io,
+    time::{Duration, Instant},
+};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{DefaultTerminal, Frame, layout::Rect};
@@ -6,9 +9,11 @@ use ratatui::{DefaultTerminal, Frame, layout::Rect};
 use crate::{
     app::{draw, input::keys, state::layout},
     core::{
-        agent::{Agent, AgentSpec},
+        agent::{Agent, AgentSpec, Harness},
         registry::Registry,
     },
+    helpers::spinner,
+    ipc::server::StatusServer,
 };
 
 /// atrium's own chords all live behind this one key, so every other keystroke
@@ -19,6 +24,9 @@ const LEADER: KeyCode = KeyCode::F(12);
 pub struct App {
     registry: Registry,
     spec: AgentSpec,
+    harness: Harness,
+    server: StatusServer,
+    started: Instant,
     stage: Rect,
     leader_armed: bool,
     should_quit: bool,
@@ -26,10 +34,15 @@ pub struct App {
 
 impl App {
     pub fn new(spec: AgentSpec, rows: u16, cols: u16) -> io::Result<Self> {
+        let server = StatusServer::bind()?;
+        // Agents call back into this same binary, so its path is the one to hand out.
+        let harness = Harness { exe: std::env::current_exe()?, socket: server.path().to_path_buf() };
+
         let (_, stage) = layout::split(Rect::new(0, 0, cols, rows));
         let mut registry = Registry::new();
-        registry.push(Agent::spawn(&spec, stage.height, stage.width)?);
-        Ok(Self { registry, spec, stage, leader_armed: false, should_quit: false })
+        registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
+
+        Ok(Self { registry, spec, harness, server, started: Instant::now(), stage, leader_armed: false, should_quit: false })
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -37,6 +50,9 @@ impl App {
             let (_, stage) = layout::split(Rect::from(terminal.size()?));
             self.stage = stage;
             self.registry.resize_all(stage.height, stage.width)?;
+            for report in self.server.drain() {
+                self.registry.apply(&report);
+            }
             self.registry.refresh();
 
             terminal.draw(|frame| self.draw(frame))?;
@@ -57,7 +73,7 @@ impl App {
     pub fn draw(&mut self, frame: &mut Frame) {
         let (sidebar, stage) = layout::split(frame.area());
         if let Some(area) = sidebar {
-            draw::sidebar::draw(frame, area, &self.registry);
+            draw::sidebar::draw(frame, area, &self.registry, spinner::frame_at(self.started.elapsed()));
         }
         if let Some(agent) = self.registry.focused() {
             draw::stage::draw(frame, stage, agent.session());
@@ -100,7 +116,7 @@ impl App {
     }
 
     fn hold_another(&mut self) -> io::Result<()> {
-        let agent = Agent::spawn(&self.spec, self.stage.height, self.stage.width)?;
+        let agent = Agent::spawn(&self.spec, &self.harness, self.stage.height, self.stage.width)?;
         self.registry.push(agent);
         Ok(())
     }

@@ -1,19 +1,23 @@
 use super::*;
-use crate::core::agent::{Agent, AgentSpec};
+use crate::core::agent::{Agent, AgentSpec, Harness};
 use ratatui::{Terminal, backend::TestBackend};
+
+fn harness() -> Harness {
+    Harness { exe: "atrium".into(), socket: "/nonexistent/atrium.sock".into() }
+}
 
 fn registry_of(dirs: &[&str]) -> Registry {
     let mut registry = Registry::new();
     for dir in dirs {
         let spec = AgentSpec::new("cat", Vec::new(), *dir);
-        registry.push(Agent::spawn(&spec, 24, 80).expect("pty should open"));
+        registry.push(Agent::spawn(&spec, &harness(), 24, 80).expect("pty should open"));
     }
     registry
 }
 
 fn rendered(registry: &Registry) -> String {
     let mut terminal = Terminal::new(TestBackend::new(26, 6)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), registry)).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), registry, '.')).expect("draw");
     terminal.backend().buffer().content().chunks(26).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 

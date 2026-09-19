@@ -1,10 +1,16 @@
 use super::*;
-use crate::core::agent::{AgentSpec, Status};
+use crate::core::agent::{AgentSpec, Harness, Status};
 
 /// `cat` just sits on its pty, which is all a registry test needs from a child.
+/// Tests never bind a socket; a path that cannot be connected to is exactly
+/// what a hook is expected to shrug off.
+fn harness() -> Harness {
+    Harness { exe: "atrium".into(), socket: "/nonexistent/atrium.sock".into() }
+}
+
 fn held(cwd: &str) -> Agent {
     let spec = AgentSpec::new("cat", Vec::new(), cwd);
-    Agent::spawn(&spec, 24, 80).expect("pty should open")
+    Agent::spawn(&spec, &harness(), 24, 80).expect("pty should open")
 }
 
 fn registry_of(n: usize) -> Registry {

@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::core::agent::Agent;
+use crate::{core::agent::Agent, ipc::wire::Report};
 
 /// The agents this atrium is holding, and which one the stage is showing.
 #[derive(Default)]
@@ -80,6 +80,14 @@ impl Registry {
             agent.resize(rows, cols)?;
         }
         Ok(())
+    }
+
+    /// Reports name an agent by id, so they land correctly even after the rows
+    /// have been reordered or dismissed.
+    pub fn apply(&mut self, report: &Report) {
+        if let Some(agent) = self.agents.iter_mut().find(|agent| agent.id == report.agent_id) {
+            agent.apply_event(&report.event);
+        }
     }
 
     pub fn refresh(&mut self) {

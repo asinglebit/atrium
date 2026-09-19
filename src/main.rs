@@ -1,6 +1,6 @@
 use std::io;
 
-use atrium::{AgentSpec, App};
+use atrium::{AgentSpec, App, ipc::hook};
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
@@ -9,8 +9,10 @@ use crossterm::{
 /// What atrium holds when you do not say otherwise.
 const DEFAULT_AGENT: &str = "claude";
 
-fn agent_spec() -> AgentSpec {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+/// The subcommand agents call back through. Not a program you would run.
+const HOOK_SUBCOMMAND: &str = "hook";
+
+fn agent_spec(args: &[String]) -> AgentSpec {
     let cwd = std::env::current_dir().unwrap_or_else(|_| ".".into());
     match args.split_first() {
         Some((program, rest)) => AgentSpec::new(program.clone(), rest.to_vec(), cwd),
@@ -18,9 +20,7 @@ fn agent_spec() -> AgentSpec {
     }
 }
 
-fn main() -> io::Result<()> {
-    let spec = agent_spec();
-
+fn run_tui(spec: AgentSpec) -> io::Result<()> {
     let mut terminal = ratatui::init();
     // ratatui does not turn this on, and without it a paste arrives as a burst
     // of individual keystrokes.
@@ -31,4 +31,14 @@ fn main() -> io::Result<()> {
     execute!(io::stdout(), DisableBracketedPaste)?;
     ratatui::restore();
     result
+}
+
+fn main() -> io::Result<()> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if args.first().is_some_and(|a| a == HOOK_SUBCOMMAND) {
+        return hook::run(args.get(1).map_or("", String::as_str));
+    }
+
+    run_tui(agent_spec(&args))
 }
