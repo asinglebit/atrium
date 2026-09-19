@@ -25,10 +25,13 @@ OPTIONS
         --check-config        report what the config file says, and what it got wrong
 
 KEYS
-    Everything goes to the focused agent except chords behind the leader (F12):
-    F12 n  hold a new agent      F12 j / k  next / previous
-    F12 x  dismiss this one      F12 1-9    jump to that agent
-    F12 q  quit                  F12 F12    send the leader itself
+    Actions fire directly; every other key reaches the focused agent.
+    ctrl+t  hold a new agent     ctrl+n / ctrl+p  next / previous
+    ctrl+]  dismiss this one     ctrl+1..9        jump, terminal permitting
+    ctrl+q  quit
+
+    Untouched, so the agent keeps them: ctrl+c, ctrl+d, ctrl+z, ctrl+v,
+    ctrl+x, ctrl+l, ctrl+r, ctrl+u, ctrl+w, ctrl+a, ctrl+e, ctrl+k, esc.
 
 CONFIG";
 
@@ -49,7 +52,8 @@ fn check_config() {
     if !path.exists() {
         println!("  (no file yet -- these are the defaults)");
     }
-    println!("  leader: {}", config.keymap.leader.label());
+    let claimed: Vec<String> = config.keymap.claimed().iter().map(|chord| chord.label()).collect();
+    println!("  keys:   {}", claimed.join(", "));
     println!("  theme:  {}", config.theme.name.label());
     println!("  projects: {}", projects::default_root().display());
 

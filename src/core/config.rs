@@ -93,7 +93,8 @@ impl Config {
                 continue;
             };
             if !self.keymap.set(action, chord) {
-                self.problems.push(format!("keys.{action}: no such action"));
+                let hint = if action == "leader" { " -- there is no leader any more; actions fire directly, so bind them one by one" } else { "" };
+                self.problems.push(format!("keys.{action}: no such action{hint}"));
             }
         }
     }

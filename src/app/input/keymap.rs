@@ -66,11 +66,20 @@ fn key_name(code: KeyCode) -> String {
     }
 }
 
-/// Which key does what. Everything but the leader is a chord pressed after it,
-/// so these never collide with what the agent wants.
+/// Which chord does what. These fire directly -- there is no leader to press
+/// first -- so each one is a key the agent can no longer have. The defaults are
+/// picked for what they cost, not for the mnemonic:
+///
+/// - `ctrl+t` transposes characters in readline, and opens Claude's todo panel.
+/// - `ctrl+n` / `ctrl+p` walk shell history; Claude's own box uses the arrows.
+/// - `ctrl+]` is the telnet escape, which nothing in a TUI wants.
+/// - `ctrl+q` is XON, and raw mode has already turned flow control off.
+///
+/// Deliberately untouched: `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+x`,
+/// `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`, `ctrl+k` and
+/// `ctrl+[`, which is Escape.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Keymap {
-    pub leader: Chord,
     pub quit: Chord,
     pub new: Chord,
     pub dismiss: Chord,
@@ -78,19 +87,13 @@ pub struct Keymap {
     pub previous: Chord,
 }
 
+fn ctrl(c: char) -> Chord {
+    Chord { code: KeyCode::Char(c), modifiers: KeyModifiers::CONTROL }
+}
+
 impl Default for Keymap {
-    /// F12 is the leader because nothing else in this stack claims it -- not
-    /// sway, ghostty, tmux, vim or readline -- so it can be taken without
-    /// costing the agent a key it wanted.
     fn default() -> Self {
-        Self {
-            leader: Chord::plain(KeyCode::F(12)),
-            quit: Chord::plain(KeyCode::Char('q')),
-            new: Chord::plain(KeyCode::Char('n')),
-            dismiss: Chord::plain(KeyCode::Char('x')),
-            next: Chord::plain(KeyCode::Char('j')),
-            previous: Chord::plain(KeyCode::Char('k')),
-        }
+        Self { quit: ctrl('q'), new: ctrl('t'), dismiss: ctrl(']'), next: ctrl('n'), previous: ctrl('p') }
     }
 }
 
@@ -98,7 +101,6 @@ impl Keymap {
     /// Applies one `[keys]` entry. False when the name is not one of ours.
     pub fn set(&mut self, action: &str, chord: Chord) -> bool {
         match action {
-            "leader" => self.leader = chord,
             "quit" => self.quit = chord,
             "new" => self.new = chord,
             "dismiss" => self.dismiss = chord,
@@ -107,6 +109,11 @@ impl Keymap {
             _ => return false,
         }
         true
+    }
+
+    /// Every chord atrium claims, so the agent can be told what it will not see.
+    pub fn claimed(&self) -> [Chord; 5] {
+        [self.quit, self.new, self.dismiss, self.next, self.previous]
     }
 }
 

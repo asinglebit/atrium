@@ -37,8 +37,19 @@ pub struct App {
     /// Some while the new-agent modal is up; input goes to it instead of the agent.
     picker: Option<Picker>,
     last_git: Instant,
-    leader_armed: bool,
     should_quit: bool,
+}
+
+/// `ctrl+1`..`ctrl+9` jumps straight to a row, on the terminals that can encode
+/// it -- most cannot, so this is a shortcut rather than the way around.
+fn jump_target(key: &KeyEvent) -> Option<usize> {
+    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+        return None;
+    }
+    match key.code {
+        KeyCode::Char(c @ '1'..='9') => Some(c as usize - '1' as usize),
+        _ => None,
+    }
 }
 
 /// Spawn failures arrive as a paragraph naming every directory on PATH; only
@@ -57,19 +68,7 @@ impl App {
         let mut registry = Registry::new();
         registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
 
-        Ok(Self {
-            registry,
-            theme: config.theme,
-            keymap: config.keymap,
-            harness,
-            server,
-            started: Instant::now(),
-            stage,
-            picker: None,
-            last_git: Instant::now(),
-            leader_armed: false,
-            should_quit: false,
-        })
+        Ok(Self { registry, theme: config.theme, keymap: config.keymap, harness, server, started: Instant::now(), stage, picker: None, last_git: Instant::now(), should_quit: false })
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -122,46 +121,32 @@ impl App {
         if self.picker.is_some() {
             return self.on_picker_key(key);
         }
-
-        if self.leader_armed {
-            self.leader_armed = false;
-            return self.on_leader_chord(key);
-        }
-
-        if self.keymap.leader.matches(&key) {
-            self.leader_armed = true;
+        if self.take_action(&key) {
             return Ok(());
         }
-
         self.send(key)
     }
 
-    /// Chords are compared rather than matched, because the keymap is only
-    /// known at run time.
-    fn on_leader_chord(&mut self, key: KeyEvent) -> io::Result<()> {
-        // Pressing the leader twice passes it through to the agent.
-        if self.keymap.leader.matches(&key) {
-            return self.send(key);
-        }
-
-        if self.keymap.quit.matches(&key) {
+    /// True when atrium kept the key for itself. Anything it does not claim
+    /// goes straight through, which is most of the keyboard.
+    fn take_action(&mut self, key: &KeyEvent) -> bool {
+        let keymap = self.keymap;
+        if keymap.quit.matches(key) {
             self.should_quit = true;
-        } else if self.keymap.new.matches(&key) {
+        } else if keymap.new.matches(key) {
             self.open_picker();
-        } else if self.keymap.dismiss.matches(&key) || key.code == KeyCode::Down {
-            if key.code == KeyCode::Down {
-                self.registry.focus_next();
-            } else {
-                self.dismiss();
-            }
-        } else if self.keymap.next.matches(&key) {
+        } else if keymap.dismiss.matches(key) {
+            self.dismiss();
+        } else if keymap.next.matches(key) {
             self.registry.focus_next();
-        } else if self.keymap.previous.matches(&key) || key.code == KeyCode::Up {
+        } else if keymap.previous.matches(key) {
             self.registry.focus_prev();
-        } else if let KeyCode::Char(c @ '1'..='9') = key.code {
-            self.registry.focus_at(c as usize - '1' as usize);
+        } else if let Some(index) = jump_target(key) {
+            self.registry.focus_at(index);
+        } else {
+            return false;
         }
-        Ok(())
+        true
     }
 
     fn open_picker(&mut self) {

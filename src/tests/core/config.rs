@@ -40,25 +40,32 @@ fn individual_colours_are_directed_to_theme_json() {
 
 #[test]
 fn keys_can_be_rebound() {
-    let config = Config::parse("[keys]\nleader = \"f1\"\nquit = \"esc\"");
-    assert_eq!(config.keymap.leader, Chord::plain(KeyCode::F(1)));
+    let config = Config::parse("[keys]\nquit = \"esc\"\nnew = \"ctrl+y\"");
     assert_eq!(config.keymap.quit, Chord::plain(KeyCode::Esc));
+    assert_eq!(config.keymap.new.label(), "ctrl+y");
     assert!(config.problems.is_empty(), "{:?}", config.problems);
 }
 
 #[test]
-fn a_leader_can_carry_modifiers() {
-    let config = Config::parse("[keys]\nleader = \"ctrl+g\"");
-    assert_eq!(config.keymap.leader.label(), "ctrl+g");
+fn an_action_can_carry_modifiers() {
+    let config = Config::parse("[keys]\nnext = \"ctrl+alt+n\"");
+    assert_eq!(config.keymap.next.label(), "ctrl+alt+n");
     assert!(config.problems.is_empty(), "{:?}", config.problems);
+}
+
+#[test]
+fn a_leftover_leader_says_what_replaced_it() {
+    let config = Config::parse("[keys]\nleader = \"f12\"");
+    assert_eq!(config.problems.len(), 1);
+    assert!(config.problems[0].contains("no leader any more"), "{:?}", config.problems);
 }
 
 #[test]
 fn a_bare_modifier_is_reported_rather_than_silently_doing_nothing() {
-    let config = Config::parse("[keys]\nleader = \"ctrl\"");
-    assert_eq!(config.keymap.leader, Keymap::default().leader, "the default should be kept");
+    let config = Config::parse("[keys]\nquit = \"ctrl\"");
+    assert_eq!(config.keymap.quit, Keymap::default().quit, "the default should be kept");
     assert_eq!(config.problems.len(), 1);
-    assert!(config.problems[0].contains("keys.leader"), "{:?}", config.problems);
+    assert!(config.problems[0].contains("keys.quit"), "{:?}", config.problems);
 }
 
 #[test]

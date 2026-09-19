@@ -109,23 +109,55 @@ fn a_label_can_be_parsed_back() {
 }
 
 #[test]
-fn the_default_leader_is_f12() {
-    assert_eq!(Keymap::default().leader, Chord::plain(KeyCode::F(12)));
+fn every_action_fires_on_a_ctrl_chord() {
+    for chord in Keymap::default().claimed() {
+        assert!(chord.modifiers.contains(KeyModifiers::CONTROL), "{} is not a ctrl chord", chord.label());
+    }
+}
+
+#[test]
+fn no_default_takes_a_key_the_agent_needs() {
+    // ctrl+[ is Escape, and the rest are signals or readline editing that a
+    // shell or an agent would miss immediately.
+    const RESERVED: [char; 13] = ['c', 'd', 'z', 'v', 'x', 'l', 'r', 'u', 'w', 'a', 'e', 'k', '['];
+
+    for chord in Keymap::default().claimed() {
+        if let KeyCode::Char(c) = chord.code {
+            assert!(!RESERVED.contains(&c.to_ascii_lowercase()), "ctrl+{c} belongs to the agent");
+        }
+    }
 }
 
 #[test]
 fn every_action_is_distinct_by_default() {
-    let map = Keymap::default();
-    let bound = [map.leader, map.quit, map.new, map.dismiss, map.next, map.previous];
+    let bound = Keymap::default().claimed();
     for (index, key) in bound.iter().enumerate() {
         assert!(!bound[index + 1..].contains(key), "{key:?} is bound to two actions");
     }
 }
 
 #[test]
+fn an_unclaimed_chord_is_not_mistaken_for_an_action() {
+    let claimed = Keymap::default().claimed();
+    for c in ['c', 'd', 'z', 'v', 'x'] {
+        let pressed = press(KeyCode::Char(c), KeyModifiers::CONTROL);
+        assert!(!claimed.iter().any(|chord| chord.matches(&pressed)), "ctrl+{c} should reach the agent");
+    }
+}
+
+#[test]
+fn a_plain_letter_is_never_an_action() {
+    let claimed = Keymap::default().claimed();
+    for c in ['q', 't', 'n', 'p'] {
+        let pressed = press(KeyCode::Char(c), KeyModifiers::NONE);
+        assert!(!claimed.iter().any(|chord| chord.matches(&pressed)), "{c} without ctrl should reach the agent");
+    }
+}
+
+#[test]
 fn setting_a_known_action_takes_and_an_unknown_one_does_not() {
     let mut map = Keymap::default();
-    assert!(map.set("quit", chord("ctrl+c")));
-    assert_eq!(map.quit, chord("ctrl+c"));
+    assert!(map.set("quit", chord("ctrl+j")));
+    assert_eq!(map.quit, chord("ctrl+j"));
     assert!(!map.set("qit", chord("x")));
 }

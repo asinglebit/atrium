@@ -60,9 +60,11 @@ Everything you type goes to the focused agent, except chords behind the leader,
 name = "one dark warmer"   # any of guitar's ~30 preset names
 
 [keys]
-leader = "f12"             # or "ctrl+g", "alt+enter" -- modifiers are allowed
-quit = "q"
-new = "n"
+quit = "ctrl+q"            # any key or chord: "esc", "ctrl+g", "alt+enter"
+new = "ctrl+t"
+dismiss = "ctrl+]"
+next = "ctrl+n"
+previous = "ctrl+p"
 ```
 
 Individual colours are **not** set here: they live in `theme.json`, shared with
@@ -100,15 +102,20 @@ require a background server, which is the thing this avoids: tmux already does
 persistence, and duplicating it is how you end up writing a multiplexer. If it
 ever matters, the change is to split a server out behind the same sidebar.
 
-**`F12` is the leader because nothing else in the stack wants it.** atrium sits
-directly in the input path to the agent, so its one reserved key has to be free
-at every layer above *and* below. On the machine this was written for: XKB takes
-`Alt+Shift` (layout toggle), sway takes `Super+…` only, ghostty takes
-`ctrl+shift+…`, and tmux takes `C-a` plus thirteen prefix-less `M-` bindings.
-Function keys are claimed by none of them, and Claude Code does not use them.
-`ctrl+b` was specifically rejected: it is vim's page-up and readline's
-`backward-char`, and an agent that loses both is worse off than a leader that is
-a reach.
+**Actions fire directly, so every binding is a key taken from the agent.**
+There is no leader to press first, which makes the choice of defaults the whole
+design: `ctrl+letter` is a crowded space, and anything atrium claims the agent
+never sees. The five defaults are picked for what they cost rather than for the
+mnemonic — `ctrl+]` and `ctrl+q` cost essentially nothing, `ctrl+n`/`ctrl+p`
+cost shell history that Claude's own input box does not use, and `ctrl+t` costs
+readline's transpose. A test asserts no default lands on `ctrl+c`, `ctrl+d`,
+`ctrl+z`, `ctrl+v`, `ctrl+x`, `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`,
+`ctrl+e`, `ctrl+k` or `ctrl+[`.
+
+Nothing above atrium contends for these: sway is `Super+…` only, ghostty is
+`ctrl+shift+…`, and tmux claims `C-a` plus thirteen prefix-less `M-` bindings —
+no plain `ctrl+letter` among them. The one to avoid is `ctrl+a`, which tmux
+takes as its prefix and atrium would therefore never receive.
 
 **Hooks go in through `--settings`, never `~/.claude/settings.json`.** Each
 agent is launched with its hooks passed on the command line, so a Claude started
