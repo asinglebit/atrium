@@ -1,7 +1,9 @@
 # Splash
 
 What atrium shows while it is holding nothing. Guitar's splash, with the
-[[Profiles|harnesses]] where guitar lists recent repositories.
+[[Profiles|harnesses]] where guitar lists recent repositories: the profiles you
+wrote down, and then whatever CLI atrium knows and found installed that none of
+them already names.
 
 ```
               68b
@@ -41,9 +43,14 @@ intention.
 The chords still work: `ctrl+t` opens the [[Modals|project picker]] instead,
 `ctrl+s` opens [[Settings]], `ctrl+q` quits.
 
-A launch that fails — picking `codex` when there is no codex — leaves its
-message above the list rather than taking atrium down, and the list shifts down
-to make room for it. The [[Modals|picker]] keeps a failed launch the same way.
+A launch that fails — a profile whose program has been uninstalled since the
+scan — leaves its message above the list rather than taking atrium down, and the
+list shifts down to make room for it. The [[Modals|picker]] keeps a failed launch
+the same way.
+
+A machine with nothing installed and nothing configured has an **empty list**,
+and the splash says so in place of it, naming the three CLIs it looked for.
+Offering a `codex` that is not there would only produce that failure line.
 
 ## The wordmark
 

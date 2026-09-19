@@ -7,6 +7,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use ratatui::{DefaultTerminal, Frame, layout::Rect, widgets::Block};
 
 use crate::{
+    adapters,
     app::{
         draw,
         input::{keymap::Keymap, keys},
@@ -24,6 +25,7 @@ use crate::{
     core::{
         agent::{Agent, AgentSpec, Harness},
         config::Config,
+        installed::Found,
         layout_config::{self, LayoutConfig},
         profile::Profile,
         profiles_file::{self, StoredProfiles},
@@ -50,6 +52,9 @@ pub struct App {
     default_profile: usize,
     /// The profiles as written down, which is what the settings view edits.
     stored_profiles: StoredProfiles,
+    /// Which of the CLIs atrium knows this machine has, scanned once at start.
+    /// Kept so an edited set can be merged against it without a rescan.
+    installed: Vec<Found>,
     harness: Harness,
     server: StatusServer,
     started: Instant,
@@ -121,7 +126,7 @@ impl App {
         let stage = layout::compute(Rect::new(0, 0, cols, rows), true, sidebar_width).stage;
         let mut registry = Registry::new();
         if let Some(spec) = spec {
-            registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
+            registry.push(Agent::spawn(&spec, &harness, &config.theme, stage.height, stage.width)?);
         }
         let splash = Splash::new(config.profiles.len(), config.default_profile);
 
@@ -132,6 +137,7 @@ impl App {
             profiles: config.profiles,
             default_profile: config.default_profile,
             stored_profiles: config.stored_profiles,
+            installed: config.installed,
             harness,
             server,
             started: Instant::now(),
@@ -203,7 +209,14 @@ impl App {
             draw::title::draw(frame, &layout, &self.theme, &cwd, self.view_name());
 
             if let Some(settings) = &mut self.settings {
-                let context = draw::settings::Context { keymap: &self.keymap, theme: &self.theme, profiles: &self.stored_profiles, default_profile: self.default_profile, socket: self.server.path() };
+                let context = draw::settings::Context {
+                    keymap: &self.keymap,
+                    theme: &self.theme,
+                    profiles: &self.stored_profiles,
+                    installed: &self.installed,
+                    default_profile: self.default_profile,
+                    socket: self.server.path(),
+                };
                 draw::settings::draw(frame, layout.stage, layout.app, settings, &context);
             } else {
                 if let Some(area) = layout.sidebar {
@@ -479,6 +492,7 @@ impl App {
                     self.theme = preset.theme;
                     // Written to atrium's own theme.json, never guitar's.
                     palette::save_theme(&preset.theme);
+                    self.retheme_agents();
                 }
             },
             Some(SelectionKind::AddProfile) => self.profile_editor = Some(Editor::add()),
@@ -486,6 +500,15 @@ impl App {
             // Info rows and chords can be landed on but do nothing: paths are
             // there to be read, and a chord is rebound in the config file.
             _ => {},
+        }
+    }
+
+    /// Hands the theme just chosen to everything already held. A claude reads
+    /// its theme file again and repaints; an opencode keeps what it started
+    /// with, so for that one this is the next agent's colours being got ready.
+    fn retheme_agents(&self) {
+        for agent in self.registry.agents() {
+            adapters::detect(&agent.program).retheme(agent.config_dir.as_deref(), &self.theme);
         }
     }
 
@@ -564,7 +587,7 @@ impl App {
     /// Takes up an edited set: the picker and every later spawn see it at once,
     /// without atrium having to be restarted.
     fn adopt_profiles(&mut self, stored: StoredProfiles) {
-        let (profiles, default_profile) = stored.resolve();
+        let (profiles, default_profile) = stored.resolve(&self.installed);
         self.profiles = profiles;
         self.default_profile = default_profile;
         self.stored_profiles = stored;
@@ -641,7 +664,7 @@ impl App {
         };
 
         let spec = AgentSpec::from_profile(profile, project.path.clone());
-        match Agent::spawn(&spec, &self.harness, self.stage.height, self.stage.width) {
+        match Agent::spawn(&spec, &self.harness, &self.theme, self.stage.height, self.stage.width) {
             Ok(agent) => {
                 self.registry.push(agent);
                 self.modal = None;
@@ -705,7 +728,7 @@ impl App {
         };
         let cwd = std::env::current_dir().unwrap_or_else(|_| ".".into());
 
-        match Agent::spawn(&AgentSpec::from_profile(&profile, cwd), &self.harness, self.stage.height, self.stage.width) {
+        match Agent::spawn(&AgentSpec::from_profile(&profile, cwd), &self.harness, &self.theme, self.stage.height, self.stage.width) {
             Ok(agent) => self.registry.push(agent),
             Err(error) => self.splash.error = Some(first_line(&error.to_string())),
         }

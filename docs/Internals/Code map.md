@@ -12,6 +12,9 @@ src/
     git.rs             Branch and dirty flag for a row
     projects.rs        Finding git repositories under the projects root
     config.rs          Reads config.toml, keeping a list of what it got wrong
+    profile.rs         A launch recipe -- program, args, environment -- and ~/$VAR expansion
+    profiles_file.rs   profiles.json: the profiles as written down, and editing them
+    installed.rs       Which of the CLIs atrium knows are on this machine
     layout_config.rs   The sidebar width, in layout.json
 
   adapters/            Per-CLI launch and status wiring

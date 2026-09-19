@@ -1,13 +1,17 @@
 use super::*;
 use crate::{
-    core::{profile, projects::Project},
+    core::{
+        profile::{self, Profile},
+        projects::Project,
+    },
     helpers::palette::Theme,
 };
 use ratatui::{Terminal, backend::TestBackend};
 use std::path::PathBuf;
 
 fn picker_of(names: &[&str]) -> Picker {
-    Picker::new(names.iter().map(|name| Project { name: (*name).to_owned(), path: PathBuf::from("/p").join(name) }).collect(), profile::defaults(), 0)
+    let profiles = profile::KNOWN_PROGRAMS.iter().map(|program| Profile::bare(program)).collect();
+    Picker::new(names.iter().map(|name| Project { name: (*name).to_owned(), path: PathBuf::from("/p").join(name) }).collect(), profiles, 0)
 }
 
 fn rendered(picker: &Picker) -> String {

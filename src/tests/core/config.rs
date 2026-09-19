@@ -2,7 +2,8 @@ use super::*;
 use crate::{
     app::input::keymap::Chord,
     core::{
-        profile,
+        installed::Found,
+        profile::Profile,
         profiles_file::{StoredProfile, StoredProfiles},
     },
 };
@@ -112,11 +113,31 @@ fn unrelated_sections_are_left_alone() {
 }
 
 #[test]
-fn with_no_profiles_file_it_offers_the_clis_atrium_knows() {
+fn with_no_profiles_file_it_offers_what_is_installed() {
+    let mut config = Config::parse("");
+    config.installed = vec![Found { program: "claude", path: "/usr/bin/claude".into() }, Found { program: "opencode", path: "/usr/bin/opencode".into() }];
+    config.adopt(StoredProfiles::default());
+
+    assert_eq!(config.profiles, vec![Profile::bare("claude"), Profile::bare("opencode")], "codex is not installed here, so it is not offered");
+    assert_eq!(config.default_profile().expect("a default").name, "claude");
+}
+
+#[test]
+fn a_machine_with_nothing_installed_offers_nothing() {
     let config = Config::parse("");
 
-    assert_eq!(config.profiles, profile::defaults());
-    assert_eq!(config.default_profile().name, "claude");
+    assert!(config.profiles.is_empty(), "a cli that is not there would only fail to launch");
+    assert!(config.default_profile().is_none());
+}
+
+#[test]
+fn an_installed_cli_is_offered_beside_the_profiles() {
+    let mut config = Config::parse("");
+    config.installed = vec![Found { program: "claude", path: "/usr/bin/claude".into() }, Found { program: "opencode", path: "/usr/bin/opencode".into() }];
+    config.adopt(StoredProfiles { default: "work".to_owned(), profiles: vec![StoredProfile::named("work")] });
+
+    let names: Vec<&str> = config.profiles.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, ["work", "opencode"], "claude is already spoken for by `work`");
 }
 
 #[test]
@@ -126,7 +147,7 @@ fn profiles_come_from_the_file_atrium_writes() {
 
     let names: Vec<&str> = config.profiles.iter().map(|entry| entry.name.as_str()).collect();
     assert_eq!(names, ["work", "personal"]);
-    assert_eq!(config.default_profile().name, "personal");
+    assert_eq!(config.default_profile().expect("a default").name, "personal");
     assert!(config.profile_named("work").is_some());
 }
 

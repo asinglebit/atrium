@@ -6,6 +6,8 @@ use std::path::PathBuf;
 
 use portable_pty::CommandBuilder;
 
+use crate::helpers::palette::Theme;
+
 /// Where an agent's status comes from.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StatusSource {
@@ -15,12 +17,17 @@ pub enum StatusSource {
     Heuristic,
 }
 
-/// What an agent needs in order to report back.
+/// What atrium hands an agent when it is launched: the way home, and the look.
 #[derive(Clone, Debug)]
 pub struct Wiring {
     pub exe: PathBuf,
     pub socket: PathBuf,
     pub agent_id: u64,
+    pub theme: Theme,
+    /// Where this agent keeps its own configuration, when a profile said so.
+    /// A claude subscription's themes live inside it, so which subscription is
+    /// in use decides where the theme has to be written.
+    pub config_dir: Option<String>,
 }
 
 pub trait AgentKind {
@@ -28,6 +35,15 @@ pub trait AgentKind {
 
     /// Adds whatever makes this CLI report its status back to atrium.
     fn instrument(&self, cmd: &mut CommandBuilder, wiring: &Wiring);
+
+    /// Rewrites whatever this CLI reads its colours from, for an agent that is
+    /// **already running**. Doing nothing is the default: most CLIs cannot be
+    /// told, and one that keeps its own colours is not a failure.
+    ///
+    /// Whether it lands while the agent is up is the CLI's business. claude
+    /// watches the file and repaints; opencode reads once and keeps what it
+    /// started with, so for that one this is only ever for the next agent.
+    fn retheme(&self, _config_dir: Option<&str>, _theme: &Theme) {}
 
     fn status_source(&self) -> StatusSource;
 }

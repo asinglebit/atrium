@@ -13,7 +13,7 @@ fn registry_of(dirs: &[&str]) -> Registry {
     let mut registry = Registry::new();
     for dir in dirs {
         let spec = AgentSpec::new("cat", Vec::new(), *dir);
-        registry.push(Agent::spawn(&spec, &harness(), 24, 80).expect("pty should open"));
+        registry.push(Agent::spawn(&spec, &harness(), &Theme::classic(), 24, 80).expect("pty should open"));
     }
     registry
 }
@@ -86,7 +86,7 @@ fn branches_share_one_right_aligned_column() {
     let mut registry = Registry::new();
     for dir in [short.path(), long.path()] {
         let spec = AgentSpec::new("cat", Vec::new(), dir);
-        registry.push(Agent::spawn(&spec, &harness(), 24, 80).expect("pty"));
+        registry.push(Agent::spawn(&spec, &harness(), &Theme::classic(), 24, 80).expect("pty"));
     }
 
     let mut terminal = Terminal::new(TestBackend::new(40, 5)).expect("test terminal");
@@ -127,7 +127,7 @@ fn registry_under(entries: &[(&str, &str)]) -> Registry {
     for (dir, name) in entries {
         let profile = crate::core::profile::Profile { name: (*name).to_owned(), program: "cat".to_owned(), args: Vec::new(), env: Vec::new() };
         let spec = AgentSpec::from_profile(&profile, *dir);
-        registry.push(Agent::spawn(&spec, &harness(), 24, 80).expect("pty should open"));
+        registry.push(Agent::spawn(&spec, &harness(), &Theme::classic(), 24, 80).expect("pty should open"));
     }
     registry
 }

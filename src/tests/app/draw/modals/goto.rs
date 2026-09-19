@@ -1,5 +1,6 @@
 use super::*;
 use crate::core::agent::{Agent, AgentSpec, Harness};
+use crate::helpers::palette::Theme;
 use ratatui::{Terminal, backend::TestBackend};
 
 fn harness() -> Harness {
@@ -10,7 +11,7 @@ fn registry_of(dirs: &[&str]) -> Registry {
     let mut registry = Registry::new();
     for dir in dirs {
         let spec = AgentSpec::new("cat", Vec::new(), *dir);
-        registry.push(Agent::spawn(&spec, &harness(), 24, 80).expect("pty"));
+        registry.push(Agent::spawn(&spec, &harness(), &Theme::classic(), 24, 80).expect("pty"));
     }
     registry
 }

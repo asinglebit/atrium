@@ -3,7 +3,13 @@ use crate::core::profile;
 use std::path::PathBuf;
 
 fn picker_of(names: &[&str]) -> Picker {
-    with_profiles(names, profile::defaults())
+    with_profiles(names, known())
+}
+
+/// Every cli atrium knows, as bare profiles -- what a machine with all three
+/// installed and nothing configured would hand the picker.
+fn known() -> Vec<Profile> {
+    profile::KNOWN_PROGRAMS.iter().map(|program| Profile::bare(program)).collect()
 }
 
 /// The picker opens on the profile it is handed, which is the configured
@@ -154,7 +160,7 @@ fn tab_cycles_through_every_profile_and_comes_back() {
 fn with_nothing_configured_it_offers_the_clis_it_knows() {
     let mut picker = picker_of(&[]);
 
-    let seen: Vec<String> = profile::DEFAULT_PROGRAMS
+    let seen: Vec<String> = profile::KNOWN_PROGRAMS
         .iter()
         .map(|_| {
             let label = picker.profile_label();
@@ -163,7 +169,7 @@ fn with_nothing_configured_it_offers_the_clis_it_knows() {
         })
         .collect();
 
-    assert_eq!(seen, profile::DEFAULT_PROGRAMS, "a bare cli should name itself once, not twice");
+    assert_eq!(seen, profile::KNOWN_PROGRAMS, "a bare cli should name itself once, not twice");
 }
 
 #[test]

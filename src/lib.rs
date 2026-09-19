@@ -4,6 +4,7 @@ pub mod core {
     pub mod agent;
     pub mod config;
     pub mod git;
+    pub mod installed;
     pub mod layout_config;
     pub mod profile;
     pub mod profiles_file;

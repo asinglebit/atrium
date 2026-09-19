@@ -14,8 +14,9 @@ Pick a project, pick a profile.
   tight one wins. Without that the obvious answer is rarely first.
 - **`tab`** cycles the [[Profiles|profile]] — the CLI *and* whatever it needs to
   be launched with, which is how a subscription is chosen. With none configured
-  that is `claude`, `opencode`, `codex`, exactly as it was. The modal opens on
-  the configured default, so the common case is enter and nothing else.
+  that is whatever of `claude`, `opencode` and `codex` is **installed** — see
+  [[Profiles]]. The modal opens on the configured default, so the common case is
+  enter and nothing else.
 - **`enter`** holds it, **`esc`** closes, arrows move, backspace deletes.
 - Typing restarts the selection at the top, because the list underneath it has
   just changed.

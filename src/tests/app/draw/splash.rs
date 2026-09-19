@@ -11,9 +11,12 @@ fn harnesses() -> Vec<Profile> {
 }
 
 fn rendered(splash: &Splash, width: u16, height: u16) -> String {
-    let profiles = harnesses();
+    rendered_with(splash, &harnesses(), width, height)
+}
+
+fn rendered_with(splash: &Splash, profiles: &[Profile], width: u16, height: u16) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), splash, &profiles, &Theme::classic())).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), splash, profiles, &Theme::classic())).expect("draw");
     terminal.backend().buffer().content().chunks(width as usize).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -70,6 +73,16 @@ fn a_frame_too_narrow_for_either_still_names_the_tool() {
     let out = rendered(&Splash::new(3, 0), 20, 30);
 
     assert!(out.contains(logo::COMPACT), "{out}");
+}
+
+#[test]
+fn with_nothing_to_hold_it_says_what_it_looked_for() {
+    let out = rendered_with(&Splash::new(0, 0), &[], 80, 30);
+
+    assert!(out.contains("nothing installed"), "an empty list on its own says nothing:\n{out}");
+    for program in KNOWN_PROGRAMS {
+        assert!(out.contains(program), "it should name {program}, which is what it looked for:\n{out}");
+    }
 }
 
 #[test]

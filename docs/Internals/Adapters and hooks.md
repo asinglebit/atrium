@@ -9,8 +9,8 @@ so `/usr/local/bin/claude` and `claude` reach the same adapter.
 
 | Name | Reports via | Notes |
 | --- | --- | --- |
-| `claude` | Hooks | Fully wired |
-| `opencode` | Heuristic | Held and tagged, so it can report once opencode grows something hook-shaped |
+| `claude` | Hooks | Fully wired. Wears atrium's [[Themes\|theme]], and follows a change while running |
+| `opencode` | Heuristic | Held and tagged, so it can report once opencode grows something hook-shaped. Wears atrium's [[Themes\|theme]] |
 | `codex` | Heuristic | Same |
 | anything else | Heuristic | Still held; atrium just cannot say more than whether it is alive |
 
@@ -20,6 +20,20 @@ Every agent, recognised or not, carries its identity and the way home:
 ATRIUM_AGENT_ID=<id>
 ATRIUM_SOCK=<path to this atrium's socket>
 ```
+
+## What an adapter is handed
+
+`instrument` gets the command before it is launched, and a `Wiring`: the way
+home (`exe`, `socket`, `agent_id`), the [[Themes|theme]], and the config
+directory the profile named, if it named one. The theme is in there because for
+claude it travels in the same `--settings` document as the hooks — splitting it
+out would have meant a second `--settings`, which replaces rather than adds.
+
+`retheme` is the other half: the theme changed under an agent that is **already
+running**. It does nothing by default, and what it is worth differs by CLI —
+claude watches its theme file and repaints, opencode reads once and keeps what
+it started with. Neither failing to write is treated as an error: an agent in
+its own colours is not a broken agent.
 
 ## Claude's hooks
 

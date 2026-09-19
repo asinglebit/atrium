@@ -9,8 +9,14 @@ fn stored() -> StoredProfiles {
     StoredProfiles { default: "work".to_owned(), profiles: vec![StoredProfile::named("work"), StoredProfile::named("personal")] }
 }
 
-fn context<'a>(theme: &'a Theme, keymap: &'a Keymap, profiles: &'a StoredProfiles) -> Context<'a> {
-    Context { keymap, theme, profiles, default_profile: 0, socket: Path::new("/run/user/1000/atrium/1.sock") }
+/// claude and opencode installed, codex not -- so the tab has one of each to
+/// draw.
+fn found() -> Vec<Found> {
+    vec![Found { program: "claude", path: "/usr/bin/claude".into() }, Found { program: "opencode", path: "/home/x/.local/share/mise/shims/opencode".into() }]
+}
+
+fn context<'a>(theme: &'a Theme, keymap: &'a Keymap, profiles: &'a StoredProfiles, installed: &'a [Found]) -> Context<'a> {
+    Context { keymap, theme, profiles, installed, default_profile: 0, socket: Path::new("/run/user/1000/atrium/1.sock") }
 }
 
 /// Draws and hands back what was painted, keeping whatever the draw recorded on
@@ -19,7 +25,8 @@ fn rendered(settings: &mut Settings, width: u16, height: u16) -> String {
     let theme = Theme::classic();
     let keymap = Keymap::default();
     let profiles = stored();
-    let context = context(&theme, &keymap, &profiles);
+    let installed = found();
+    let context = context(&theme, &keymap, &profiles, &installed);
 
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test terminal");
     terminal.draw(|frame| draw(frame, frame.area(), frame.area(), settings, &context)).expect("draw");
@@ -74,7 +81,8 @@ fn rows_alternate_a_shaded_background() {
     let theme = Theme::classic();
     let keymap = Keymap::default();
     let profiles = stored();
-    let context = context(&theme, &keymap, &profiles);
+    let installed = found();
+    let context = context(&theme, &keymap, &profiles, &installed);
     let mut settings = Settings::new();
 
     let mut terminal = Terminal::new(TestBackend::new(90, TALL)).expect("test terminal");
@@ -85,6 +93,31 @@ fn rows_alternate_a_shaded_background() {
     let rows: Vec<bool> = (0..TALL).map(|row| (0..90).any(|column| buffer[(column, row)].bg == shaded)).collect();
 
     assert!(rows.iter().any(|shaded| *shaded), "no row was shaded at all");
+}
+
+#[test]
+fn the_opencode_theme_is_named_only_where_there_is_an_opencode() {
+    let (_, out) = on_tab(Tab::General, 120);
+    assert!(out.contains("opencode theme:"), "atrium writes this one outside its own directory, so it says where:\n{out}");
+
+    let theme = Theme::classic();
+    let keymap = Keymap::default();
+    let profiles = stored();
+    let context = context(&theme, &keymap, &profiles, &[]);
+    let mut settings = Settings::new();
+    let mut terminal = Terminal::new(TestBackend::new(120, TALL)).expect("test terminal");
+    terminal.draw(|frame| draw(frame, frame.area(), frame.area(), &mut settings, &context)).expect("draw");
+    let bare: String = terminal.backend().buffer().content().chunks(120).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n");
+
+    assert!(!bare.contains("opencode theme:"), "with no opencode installed the file means nothing:\n{bare}");
+}
+
+#[test]
+fn the_profiles_tab_says_what_is_installed_and_what_is_not() {
+    let (_, out) = on_tab(Tab::Profiles, 90);
+
+    assert!(out.contains("/usr/bin/claude"), "an installed cli should say where it was found:\n{out}");
+    assert!(out.contains("not installed"), "codex is not on this machine, and silence would not explain its absence:\n{out}");
 }
 
 #[test]

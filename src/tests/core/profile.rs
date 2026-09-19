@@ -41,10 +41,9 @@ fn only_a_named_profile_earns_a_row_tag() {
 }
 
 #[test]
-fn the_defaults_are_the_clis_atrium_knows() {
-    let names: Vec<String> = defaults().iter().map(|profile| profile.name.clone()).collect();
-
-    assert_eq!(names, DEFAULT_PROGRAMS);
+fn the_clis_atrium_knows_lead_with_the_one_a_profile_defaults_to() {
+    assert_eq!(KNOWN_PROGRAMS[0], DEFAULT_PROGRAM, "an empty program means claude, and claude is what a fresh machine is offered first");
+    assert!(KNOWN_PROGRAMS.contains(&"opencode") && KNOWN_PROGRAMS.contains(&"codex"), "{KNOWN_PROGRAMS:?}");
 }
 
 #[test]

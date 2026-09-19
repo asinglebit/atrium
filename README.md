@@ -62,9 +62,10 @@ atrium --check-config     # what the config says, and what it got wrong
 ```
 
 Started with nothing to go on, atrium **opens on a splash** listing what it can
-hold — the harnesses from `profiles.json`, plus the CLIs it knows. Enter holds
-the selected one in the directory you started in. Given `--profile` or a
-command, it skips the splash and holds that, because you already said.
+hold — the harnesses from `profiles.json`, plus every CLI it knows and finds
+**installed**: `claude`, `opencode`, `codex`. Enter holds the selected one in the
+directory you started in. Given `--profile` or a command, it skips the splash and
+holds that, because you already said.
 
 The sidebar starts hidden; `ctrl+o` brings it in.
 
@@ -111,12 +112,16 @@ launched with — for a Claude subscription, a `CLAUDE_CONFIG_DIR` and a flag or
 two. They are added, renamed and deleted in `ctrl+s` → profiles, and atrium
 keeps them in `profiles.json` of its own, because rewriting `config.toml` would
 lose your comments. `~` and `$VAR` are stored as you type them and expanded only
-on the way to an agent, so the file stays portable. With none configured you get
-`claude`, `opencode` and `codex`. Inside `ctrl+t`, `tab` cycles them.
+on the way to an agent, so the file stays portable. Beside them you get whatever
+of `claude`, `opencode` and `codex` is on your `PATH` and not already named by a
+profile — `--check-config` and `ctrl+s` → profiles both say what was found and
+where. Inside `ctrl+t`, `tab` cycles the lot.
 
 Themes are easier picked than typed: `ctrl+s` opens settings, where the themes
 tab lists all thirty and Enter applies one. Individual colours are **not** set
-in `config.toml`: they live in `theme.json`.
+in `config.toml`: they live in `theme.json`. **The agents wear it too**: claude
+and opencode are both told, and a claude already running follows the change
+without being restarted.
 
 `--check-config` names anything it could not use rather than failing silently.
 Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
@@ -133,11 +138,12 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/core/config.rs` | Reads `config.toml`, keeping a list of what it got wrong |
 | `src/core/profile.rs` | A named launch recipe — program, args, environment — and the `~`/`$VAR` expansion |
 | `src/core/profiles_file.rs` | `profiles.json`: the profiles as written down, and adding, renaming and deleting them |
+| `src/core/installed.rs` | Which of the CLIs atrium knows are on this machine, and where |
 | `src/app/state/profile_editor.rs` | The add/manage/delete flow behind the profiles tab |
 | `src/app/draw/splash.rs` | What atrium shows while it holds nothing: the wordmark, and what it could hold |
 | `src/helpers/logo.rs` | The wordmark, in three sizes |
 | `src/core/layout_config.rs` | The one thing atrium writes back: the sidebar's width, in `layout.json` |
-| `src/adapters/` | Per-CLI launch and status wiring — `claude`, and stubs for `opencode` and `codex` |
+| `src/adapters/` | Per-CLI launch, status and theme wiring — `claude`, `opencode`, and a stub for `codex` |
 | `src/ipc/server.rs` | The unix socket agents report back through |
 | `src/ipc/hook.rs` | The other end: `atrium hook <Event>` |
 | `src/app/draw/` | The sidebar, the stage, the settings view, the menu and the modals |
@@ -200,6 +206,17 @@ that already existed does the job and the modal gained no new key. A profile
 whose name is its program renders as just `claude`, and tags no row — otherwise
 every row would carry the same word and say nothing.
 
+**What is installed is discovered, not declared.** atrium knows three CLIs and
+looks for them on `PATH` rather than asking you to write down that you have
+them: what it finds is offered beside your profiles, so an `opencode` install
+needs no configuration at all to show up on the splash. Two rules keep the list
+honest. A CLI a profile already names is **not** also offered bare — `work` and
+`personal` are how claude is held here, and a fourth row saying `claude` would
+add nothing. And a CLI that is not installed is not offered, because picking it
+is a launch that can only fail; that used to be exactly what happened to anyone
+without codex. The scan runs once at start, and the settings profiles tab shows
+what it found and where, so an absence has somewhere to be explained.
+
 **Profiles live in a file atrium writes, which is why they are not in
 `config.toml`.** They started there, and moved as soon as they became editable
 in the settings view: a TOML rewrite drops the comments and reformats
@@ -228,6 +245,37 @@ something selectable — the next one *in the direction it was going*, and faili
 that the nearest. Indexing only the selectable rows would have been simpler and
 is what atrium did before; it makes a click on a heading unrepresentable and the
 snap impossible, which is what made j/k feel like it was sticking.
+
+**The agents are handed the theme, because both of them can be told.** An agent
+paints its own cells, so the palette would stop at the frame — the stage pass
+below is atrium reaching as far as it can from the outside. Reaching further
+means writing a theme file where each CLI looks for one, and naming it in what
+atrium already hands that CLI at launch.
+
+**claude** takes `{ name, base, overrides }` at `<CLAUDE_CONFIG_DIR>/themes/`
+and selects it as `custom:atrium` — in the same `--settings` document as the
+hooks, because a second `--settings` replaces rather than adds. Overrides on a
+`dark` or `light` base, so a colour claude adds later is not a hole atrium has
+to fill, and per **subscription**, because `CLAUDE_CONFIG_DIR` is what decides
+which directory it reads themes from. Claude's own mark keeps the theme's orange
+instead of taking atrium's purple: it is whose agent it is, not whose window.
+
+**opencode** reads a theme by **name** from its own config directory and nowhere
+else — a path in the config is ignored, and so is one dropped in
+`OPENCODE_CONFIG_DIR`; both were tried before settling this. So the palette goes
+to `~/.config/opencode/themes/atrium.json` and is selected by a `tui.json` of
+atrium's own, handed over as `OPENCODE_TUI_CONFIG`. That variable is read *in
+addition* to opencode's own `tui.json`, so your keybinds and scroll settings are
+untouched; editing that file instead would have meant owning it. Colours cross as
+`#rrggbb` or as a bare number for the terminal's own sixteen — the honest answer
+for the `ansi` preset, though opencode then draws its own idea of each index
+rather than asking the terminal.
+
+**Switching theme catches the agents already held**, which is the only part of
+this that is not launch-time. claude watches its theme file and repaints on the
+spot. opencode reads once and keeps what it started with: it watches neither
+file, and its TUI API offers a theme *picker* and a dark/light toggle but no way
+to name one — so the rewrite is for the next opencode rather than this one.
 
 **The stage needed the theme painted back on, one cell at a time.** An embedded
 terminal writes `Color::Reset` for anything the agent never coloured, and the

@@ -1,9 +1,10 @@
 /// What a profile launches when it does not say otherwise.
 pub const DEFAULT_PROGRAM: &str = "claude";
 
-/// The CLIs atrium offers when `config.toml` names no profiles. Each becomes a
-/// profile of its own, so the picker has one code path either way.
-pub const DEFAULT_PROGRAMS: [&str; 3] = ["claude", "opencode", "codex"];
+/// The CLIs atrium knows how to hold, and so the ones it looks for on `PATH`.
+/// An installed one becomes a profile of its own, so the picker has one code
+/// path whether anything is configured or not.
+pub const KNOWN_PROGRAMS: [&str; 3] = ["claude", "opencode", "codex"];
 
 /// Which Claude subscription is in use is this environment variable and nothing
 /// else, which is why `config_dir` is worth its own setting.
@@ -43,11 +44,6 @@ impl Profile {
     pub fn config_dir(&self) -> Option<&str> {
         self.env.iter().find(|(key, _)| key == CONFIG_DIR_ENV).map(|(_, value)| value.as_str())
     }
-}
-
-/// Everything atrium offers when nothing is configured.
-pub fn defaults() -> Vec<Profile> {
-    DEFAULT_PROGRAMS.iter().map(|program| Profile::bare(program)).collect()
 }
 
 /// `~` at the front, and `$VAR` or `${VAR}` anywhere, so a path copied out of a

@@ -10,9 +10,10 @@ use crate::{
     adapters::{self, StatusSource, Wiring},
     core::{
         git::{self, GitContext},
-        profile::Profile,
+        profile::{self, Profile},
         pty::PtySession,
     },
+    helpers::palette::Theme,
 };
 
 /// Agent ids only have to be unique within one atrium, which a counter gives.
@@ -117,6 +118,12 @@ pub struct Agent {
     pub id: u64,
     pub name: String,
     pub cwd: PathBuf,
+    /// What it was launched as, which is what picks the adapter again when the
+    /// theme changes under a running agent.
+    pub program: String,
+    /// The configuration directory it was launched against, when a profile
+    /// named one -- where a claude subscription keeps its themes.
+    pub config_dir: Option<String>,
     /// Which profile it was held under, when that says something a bare CLI
     /// name would not.
     pub profile: Option<String>,
@@ -127,16 +134,28 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn spawn(spec: &AgentSpec, harness: &Harness, rows: u16, cols: u16) -> io::Result<Self> {
+    pub fn spawn(spec: &AgentSpec, harness: &Harness, theme: &Theme, rows: u16, cols: u16) -> io::Result<Self> {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let kind = adapters::detect(&spec.program);
 
         let mut cmd = spec.command();
-        kind.instrument(&mut cmd, &Wiring { exe: harness.exe.clone(), socket: harness.socket.clone(), agent_id: id });
+        let config_dir = spec.env.iter().find(|(key, _)| key == profile::CONFIG_DIR_ENV).map(|(_, value)| value.clone());
+        kind.instrument(&mut cmd, &Wiring { exe: harness.exe.clone(), socket: harness.socket.clone(), agent_id: id, theme: *theme, config_dir: config_dir.clone() });
 
         let session = PtySession::spawn(cmd, rows, cols)?;
         let git = git::context_for(&spec.cwd);
-        Ok(Self { id, name: spec.name(), cwd: spec.cwd.clone(), profile: spec.profile.clone(), status: Status::Idle, source: kind.status_source(), git, session })
+        Ok(Self {
+            id,
+            name: spec.name(),
+            cwd: spec.cwd.clone(),
+            program: spec.program.clone(),
+            config_dir,
+            profile: spec.profile.clone(),
+            status: Status::Idle,
+            source: kind.status_source(),
+            git,
+            session,
+        })
     }
 
     pub fn git(&self) -> Option<&GitContext> {

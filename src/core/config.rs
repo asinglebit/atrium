@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use crate::{
     app::input::keymap::{self, Keymap},
     core::{
-        profile::{self, Profile},
+        installed::{self, Found},
+        profile::Profile,
         profiles_file::{self, StoredProfiles},
     },
     helpers::palette::{self, Theme},
@@ -22,6 +23,9 @@ pub struct Config {
     /// The same profiles as they are written down, which is what the settings
     /// view shows and edits. Raw, so saving cannot hardcode a home directory.
     pub stored_profiles: StoredProfiles,
+    /// Which of the CLIs atrium knows are on this machine. What is installed
+    /// and not already spoken for is offered alongside the profiles.
+    pub installed: Vec<Found>,
     /// What the file got wrong. Kept rather than discarded so `--check-config`
     /// can say so; the TUI itself carries on with the defaults.
     pub problems: Vec<String>,
@@ -31,7 +35,7 @@ impl Default for Config {
     /// A fixed base, so parsing is the same everywhere. `load` swaps in
     /// whatever theme.json says before the file gets a look at it.
     fn default() -> Self {
-        Self { theme: Theme::classic(), keymap: Keymap::default(), profiles: profile::defaults(), default_profile: 0, stored_profiles: StoredProfiles::default(), problems: Vec::new() }
+        Self { theme: Theme::classic(), keymap: Keymap::default(), profiles: Vec::new(), default_profile: 0, stored_profiles: StoredProfiles::default(), installed: Vec::new(), problems: Vec::new() }
     }
 }
 
@@ -47,14 +51,16 @@ impl Config {
             Ok(text) => Self::parse_with(&text, base),
             Err(_) => Self { theme: base, ..Self::default() },
         };
+        config.installed = installed::scan();
         config.adopt(profiles_file::load());
         config
     }
 
-    /// Takes what `profiles.json` says. Split out from `load` so parsing a
-    /// config file stays off the disk, which is what keeps the tests hermetic.
+    /// Takes what `profiles.json` says, against whatever the `PATH` scan found.
+    /// Split out from `load` so parsing a config file stays off the disk, which
+    /// is what keeps the tests hermetic.
     pub fn adopt(&mut self, stored: StoredProfiles) {
-        let (profiles, default_profile) = stored.resolve();
+        let (profiles, default_profile) = stored.resolve(&self.installed);
         self.profiles = profiles;
         self.default_profile = default_profile;
         self.stored_profiles = stored;
@@ -93,9 +99,10 @@ impl Config {
         config
     }
 
-    /// Which profile a bare `atrium` holds. Falls back to the first one.
-    pub fn default_profile(&self) -> &Profile {
-        &self.profiles[self.default_profile.min(self.profiles.len() - 1)]
+    /// Which profile a bare `atrium` holds. Falls back to the first one, and to
+    /// none at all on a machine where nothing atrium knows is installed.
+    pub fn default_profile(&self) -> Option<&Profile> {
+        self.profiles.get(self.default_profile).or_else(|| self.profiles.first())
     }
 
     pub fn profile_named(&self, name: &str) -> Option<&Profile> {

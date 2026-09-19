@@ -36,6 +36,7 @@ fn a_spec_with_no_directory_name_falls_back_to_the_program() {
 }
 
 use crate::core::profile;
+use crate::helpers::palette::Theme;
 use std::time::{Duration, Instant};
 
 fn harness() -> Harness {
@@ -66,7 +67,7 @@ fn a_profiles_environment_reaches_the_child() {
         env: vec![(profile::CONFIG_DIR_ENV.to_owned(), "/home/x/.claude-work".to_owned())],
     };
 
-    let agent = Agent::spawn(&AgentSpec::from_profile(&profile, "."), &harness(), 8, 60).expect("pty should open");
+    let agent = Agent::spawn(&AgentSpec::from_profile(&profile, "."), &harness(), &Theme::classic(), 8, 60).expect("pty should open");
 
     assert!(wait_for(&agent, "dir=/home/x/.claude-work"), "the subscription never reached the agent");
 }

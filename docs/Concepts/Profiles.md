@@ -93,10 +93,26 @@ argument containing one. The prompt says so rather than pretending otherwise.
   now cycles profiles, so the axis that already existed does the job and the
   modal gained no new key. See [[Modals]].
 
-With nothing configured, atrium synthesises one profile per CLI it knows —
-`claude`, `opencode`, `codex` — so the picker has a single code path and nothing
-changes for someone who has never written a profile. Deleting the last profile
-leaves that list rather than nothing.
+## What is installed
+
+atrium also looks on `PATH` for the CLIs it knows — `claude`, `opencode`,
+`codex` — and offers each one it finds as a profile of its own, so the picker
+has a single code path and a machine with nothing written down still has
+something to hold. `src/core/installed.rs`.
+
+An installed CLI is offered **unless a profile already names it**. Two claude
+subscriptions are how you hold claude; a bare `claude` beside them would be a
+third way of saying the same thing. So `work` and `personal` plus an installed
+opencode is three rows, not four — and deleting the last profile leaves what is
+installed rather than nothing.
+
+One that is **not** installed is not offered, because picking it is a launch
+that can only fail. The scan happens once at start, and what it found is listed
+in the [[Settings]] profiles tab, each with the path it was found at — a `codex`
+missing from the list is a question the tab answers.
+
+A CLI found this way is never written to `profiles.json`. It was not configured;
+it was noticed.
 
 ## Seeing which one
 

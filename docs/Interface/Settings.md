@@ -67,7 +67,7 @@ already was.
 | --- | --- |
 | general | The four files atrium reads or writes, the [[Projects]] root, and the [[Adapters and hooks\|status socket]] |
 | display | All 47 [[Themes]], with a radio marker on the one in use. Enter applies and writes it |
-| profiles | Adding, renaming and deleting [[Profiles]] |
+| profiles | Adding, renaming and deleting [[Profiles]], and under them what atrium found installed and where |
 | shortcuts | Every action with its chord, as [[Keys]] lists them |
 
 `tab`, `left` and `right` switch; `j`/`k` and the arrows move; `enter` picks.

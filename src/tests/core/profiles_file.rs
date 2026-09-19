@@ -10,6 +10,15 @@ fn work() -> StoredProfile {
     }
 }
 
+/// What a `PATH` scan would have found, without doing one.
+fn installed(programs: &[&'static str]) -> Vec<Found> {
+    programs.iter().map(|program| Found { program, path: PathBuf::from("/usr/bin").join(program) }).collect()
+}
+
+fn names(profiles: &[Profile]) -> Vec<&str> {
+    profiles.iter().map(|profile| profile.name.as_str()).collect()
+}
+
 fn both() -> StoredProfiles {
     StoredProfiles { default: "work".to_owned(), profiles: vec![work(), StoredProfile::named("personal")] }
 }
@@ -75,21 +84,44 @@ fn resolving_expands_what_was_stored_raw() {
 }
 
 #[test]
-fn an_empty_file_resolves_to_the_clis_atrium_knows() {
-    let (profiles, default) = StoredProfiles::default().resolve();
+fn an_empty_file_resolves_to_whatever_is_installed() {
+    let (profiles, default) = StoredProfiles::default().resolve(&installed(&["claude", "opencode"]));
 
-    assert_eq!(profiles, crate::core::profile::defaults());
+    assert_eq!(profiles, vec![Profile::bare("claude"), Profile::bare("opencode")]);
     assert_eq!(default, 0);
 }
 
 #[test]
+fn an_installed_cli_is_offered_beside_the_profiles() {
+    // Two claude profiles and an installed opencode: the opencode is the only
+    // thing the file does not already speak for.
+    let (profiles, _) = both().resolve(&installed(&["claude", "opencode"]));
+
+    assert_eq!(names(&profiles), ["work", "personal", "opencode"]);
+}
+
+#[test]
+fn a_cli_a_profile_already_names_is_not_offered_bare_as_well() {
+    let (profiles, _) = both().resolve(&installed(&["claude"]));
+
+    assert_eq!(names(&profiles), ["work", "personal"], "a bare claude would sit beside the two profiles that are how claude is held");
+}
+
+#[test]
+fn nothing_stored_and_nothing_installed_is_nothing_to_offer() {
+    let (profiles, _) = StoredProfiles::default().resolve(&[]);
+
+    assert!(profiles.is_empty(), "the splash says so rather than offering a cli that is not there");
+}
+
+#[test]
 fn the_default_is_held_by_name_and_found_by_position() {
-    let (_, default) = both().resolve();
+    let (_, default) = both().resolve(&[]);
     assert_eq!(default, 0);
 
     let mut profiles = both();
     profiles.set_default(1);
-    assert_eq!(profiles.resolve().1, 1);
+    assert_eq!(profiles.resolve(&installed(&["opencode"])).1, 1, "the stored ones come first, so an installed cli cannot shift it");
 }
 
 #[test]
@@ -160,14 +192,14 @@ fn removing_the_default_moves_it_to_what_is_left() {
 }
 
 #[test]
-fn removing_the_last_one_leaves_the_built_in_list() {
+fn removing_the_last_one_leaves_what_is_installed() {
     let mut profiles = both();
 
     profiles.remove(0);
     profiles.remove(0);
 
     assert!(profiles.is_empty());
-    assert_eq!(profiles.resolve().0, crate::core::profile::defaults(), "the picker must still have something to offer");
+    assert_eq!(profiles.resolve(&installed(&["claude"])).0, vec![Profile::bare("claude")], "the picker must still have something to offer");
 }
 
 #[test]

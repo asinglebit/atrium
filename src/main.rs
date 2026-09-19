@@ -35,7 +35,11 @@ PROFILES
     A profile is a CLI plus what it needs: extra flags, and extra environment.
     A Claude subscription is one of these -- `config_dir` sets CLAUDE_CONFIG_DIR,
     so `work` and `personal` are two profiles rather than two shell aliases.
-    Inside the new-agent modal, `tab` cycles them, and the splash lists them.
+    They live in profiles.json, and `ctrl+s` -> profiles is where they are made.
+
+    Beside them atrium offers the CLIs it knows and finds installed -- claude,
+    opencode, codex -- so an opencode on your PATH needs no profile at all.
+    Inside the new-agent modal, `tab` cycles the lot, and the splash lists it.
 
 KEYS
     Actions fire directly; every other key reaches the focused agent.
@@ -75,6 +79,14 @@ fn check_config() {
     println!("  keys:   {}", claimed.join(", "));
     println!("  theme:  {}", config.theme.name.label());
     println!("  projects: {}", projects::default_root().display());
+
+    println!("  installed: (what atrium knows, and where it found it)");
+    for program in profile::KNOWN_PROGRAMS {
+        match config.installed.iter().find(|found| found.program == program) {
+            Some(found) => println!("     {program:<9} {}", found.path.display()),
+            None => println!("     {program:<9} not installed"),
+        }
+    }
 
     println!("  profiles:  (* is what a bare `atrium` holds)");
     for (index, entry) in config.profiles.iter().enumerate() {

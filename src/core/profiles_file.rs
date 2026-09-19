@@ -5,7 +5,10 @@ use std::{
 
 use facet::Facet;
 
-use crate::core::profile::{self, Profile};
+use crate::core::{
+    installed::Found,
+    profile::{self, Profile},
+};
 
 /// One environment variable, as a pair of named fields rather than a tuple so
 /// that it reads as itself in the file.
@@ -82,13 +85,23 @@ impl StoredProfiles {
         self.position(&self.default).unwrap_or(0)
     }
 
-    /// The runnable list, and which of it is the default. An empty file gives
-    /// the CLIs atrium knows, so the picker always has something to offer.
-    pub fn resolve(&self) -> (Vec<Profile>, usize) {
-        if self.is_empty() {
-            return (profile::defaults(), 0);
-        }
-        (self.profiles.iter().map(StoredProfile::resolve).collect(), self.default_index())
+    /// The runnable list, and which of it is the default: what was written
+    /// down, and then every installed CLI the file did not already speak for.
+    ///
+    /// The stored ones come first, so the default stays where `default_index`
+    /// found it, and so a machine with nothing configured still has something
+    /// to offer.
+    pub fn resolve(&self, installed: &[Found]) -> (Vec<Profile>, usize) {
+        let mut profiles: Vec<Profile> = self.profiles.iter().map(StoredProfile::resolve).collect();
+        profiles.extend(installed.iter().filter(|found| !self.holds_program(found.program)).map(|found| Profile::bare(found.program)));
+        (profiles, self.default_index())
+    }
+
+    /// Whether a profile already launches this CLI. One that does makes the
+    /// bare row redundant -- it would offer `claude` beside the two profiles
+    /// that are how you actually hold claude.
+    fn holds_program(&self, program: &str) -> bool {
+        self.profiles.iter().any(|entry| entry.program_or_default() == program)
     }
 
     /// Adds one, refusing a name already taken -- two profiles with one name

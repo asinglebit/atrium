@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::state::splash::Splash,
-    core::profile::Profile,
+    core::profile::{KNOWN_PROGRAMS, Profile},
     helpers::{logo, palette::Theme, text::truncate_with_ellipsis},
 };
 
@@ -45,7 +45,8 @@ pub fn first_row(area: Rect, splash: &Splash, count: usize) -> u16 {
 /// profiles -- see `Profiles` in the docs.
 pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile], theme: &Theme) {
     let rows = logo::splash_rows_for(area.width as usize);
-    let mut lines: Vec<Line> = (0..padding(area, splash, profiles.len())).map(|_| Line::default()).collect();
+    // An empty list is still one row: the line saying there is nothing to hold.
+    let mut lines: Vec<Line> = (0..padding(area, splash, profiles.len().max(1))).map(|_| Line::default()).collect();
 
     for (index, row) in rows.iter().enumerate() {
         let colour = logo::tone(index, rows, theme);
@@ -62,6 +63,13 @@ pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile]
     if let Some(error) = &splash.error {
         lines.push(Line::from(Span::styled(truncate_with_ellipsis(error, area.width as usize), Style::default().fg(theme.COLOR_RED))).centered());
         lines.push(Line::default());
+    }
+
+    // Nothing configured and nothing installed. Naming what was looked for is
+    // the whole answer, so it is said here rather than left to the settings.
+    if profiles.is_empty() {
+        let message = format!("nothing installed that atrium knows -- it looks for {}", KNOWN_PROGRAMS.join(", "));
+        lines.push(Line::from(Span::styled(truncate_with_ellipsis(&message, area.width as usize), Style::default().fg(theme.COLOR_GREY_600))).centered());
     }
 
     for (index, profile) in profiles.iter().enumerate() {

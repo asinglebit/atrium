@@ -9,13 +9,16 @@ use ratatui::{
 };
 
 use crate::{
+    adapters::opencode,
     app::{
         input::keymap::Keymap,
         state::settings::{Selection, SelectionKind, Settings, Tab, TabHitbox},
     },
     core::{
         config::Config,
+        installed::Found,
         layout_config,
+        profile::KNOWN_PROGRAMS,
         profiles_file::{self, StoredProfiles},
         projects,
     },
@@ -49,6 +52,7 @@ pub struct Context<'a> {
     pub keymap: &'a Keymap,
     pub theme: &'a Theme,
     pub profiles: &'a StoredProfiles,
+    pub installed: &'a [Found],
     pub default_profile: usize,
     pub socket: &'a Path,
 }
@@ -228,7 +232,12 @@ fn general(body: &mut Body, context: &Context, width: usize) {
     body.blank();
     body.push(section(" paths:", width, theme));
     body.blank();
-    let paths = [(" config:", Config::path()), (" profiles:", profiles_file::path()), (" theme:", palette::theme_path()), (" layout:", layout_config::path())];
+    let mut paths = vec![(" config:", Config::path()), (" profiles:", profiles_file::path()), (" theme:", palette::theme_path()), (" layout:", layout_config::path())];
+    // The one file atrium writes outside its own directory, and only worth
+    // naming on a machine that has the opencode it is written for.
+    if context.installed.iter().any(|found| found.program == "opencode") {
+        paths.push((" opencode theme:", opencode::theme_path()));
+    }
     for (index, (label, path)) in paths.iter().enumerate() {
         body.push(row(label, &format!("{} ", path.display()), width, shade(index, theme)));
         body.selectable(SelectionKind::Info);
@@ -270,8 +279,7 @@ fn profiles(body: &mut Body, context: &Context, width: usize) {
     body.selectable(SelectionKind::AddProfile);
 
     if context.profiles.is_empty() {
-        body.push(row("  none yet -- atrium is offering the CLIs it knows", "", width, plain));
-        return;
+        body.push(row("  none yet -- what is installed below is what is on offer", "", width, plain));
     }
 
     // One name column across every row, so the directories line up under each
@@ -290,6 +298,30 @@ fn profiles(body: &mut Body, context: &Context, width: usize) {
         let left = format!(" {:<name_width$}   {}", profile.name, profile.config_dir);
         body.push(row(&truncate_with_ellipsis(&left, width.saturating_sub(4)), &format!("{marker} "), width, style));
         body.selectable(SelectionKind::Profile(index));
+    }
+
+    installed(body, context, width);
+}
+
+/// What the `PATH` scan found. It belongs beside the profiles because the two
+/// together are what the picker offers: the rows above are what you wrote down,
+/// these are what the machine turned out to have.
+fn installed(body: &mut Body, context: &Context, width: usize) {
+    let theme = context.theme;
+
+    body.blank();
+    body.push(section(" installed:", width, theme));
+    body.blank();
+
+    for (index, program) in KNOWN_PROGRAMS.iter().enumerate() {
+        let found = context.installed.iter().find(|found| found.program == *program);
+        // A missing one is said quietly rather than left out: "why is codex not
+        // on the splash" is a question the list should answer by itself.
+        let style = if found.is_some() { shade(index, theme) } else { shade(index, theme).fg(theme.COLOR_GREY_600) };
+        let right = found.map_or_else(|| "not installed ".to_owned(), |found| format!("{} ", found.path.display()));
+
+        body.push(row(&format!(" {program}"), &right, width, style));
+        body.selectable(SelectionKind::Info);
     }
 }
 
