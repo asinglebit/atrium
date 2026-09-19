@@ -20,7 +20,7 @@ fn registry_of(dirs: &[&str]) -> Registry {
 
 fn rendered(registry: &Registry) -> String {
     let mut terminal = Terminal::new(TestBackend::new(26, 6)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), registry, &Theme::default(), '.')).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), registry, &Theme::classic(), '.')).expect("draw");
     terminal.backend().buffer().content().chunks(26).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -52,4 +52,45 @@ fn the_header_counts_what_is_held() {
 fn an_empty_registry_still_draws_its_frame() {
     let registry = Registry::new();
     assert!(rendered(&registry).contains("agents 0"));
+}
+
+/// A real repository on a named branch, so a row has a branch to line up.
+fn repo_on(branch: &str) -> tempfile::TempDir {
+    use git2::{Repository, Signature};
+    let dir = tempfile::tempdir().expect("tempdir");
+    let repo = Repository::init(&dir).expect("init");
+
+    std::fs::write(dir.path().join("a.txt"), b"x").expect("write");
+    let mut index = repo.index().expect("index");
+    index.add_path(std::path::Path::new("a.txt")).expect("add");
+    index.write().expect("write index");
+    let tree = repo.find_tree(index.write_tree().expect("tree oid")).expect("tree");
+    let who = Signature::now("atrium", "a@b.c").expect("signature");
+    repo.commit(Some("HEAD"), &who, &who, "c", &tree, &[]).expect("commit");
+
+    let head = repo.head().expect("head").peel_to_commit().expect("commit");
+    repo.branch(branch, &head, true).expect("branch");
+    repo.set_head(&format!("refs/heads/{branch}")).expect("set head");
+    dir
+}
+
+#[test]
+fn branches_share_one_right_aligned_column() {
+    let short = repo_on("main");
+    let long = repo_on("a-much-longer-branch");
+
+    let mut registry = Registry::new();
+    for dir in [short.path(), long.path()] {
+        let spec = AgentSpec::new("cat", Vec::new(), dir);
+        registry.push(Agent::spawn(&spec, &harness(), 24, 80).expect("pty"));
+    }
+
+    let mut terminal = Terminal::new(TestBackend::new(40, 5)).expect("test terminal");
+    terminal.draw(|frame| draw(frame, frame.area(), &registry, &Theme::classic(), '.')).expect("draw");
+    let rows: Vec<String> = terminal.backend().buffer().content().chunks(40).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect();
+
+    // Rows 1 and 2 are the two agents; their branches must end at the same column.
+    let end_of = |row: &String| row.trim_end().chars().count();
+    assert_eq!(end_of(&rows[1]), end_of(&rows[2]), "branches are ragged:\n{}\n{}", rows[1], rows[2]);
+    assert!(rows[1].contains("main"), "{}", rows[1]);
 }

@@ -6,13 +6,21 @@ use crate::{
 };
 
 /// Everything `~/.config/atrium/config.toml` can say.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub theme: Theme,
     pub keymap: Keymap,
     /// What the file got wrong. Kept rather than discarded so `--check-config`
     /// can say so; the TUI itself carries on with the defaults.
     pub problems: Vec<String>,
+}
+
+impl Default for Config {
+    /// A fixed base, so parsing is the same everywhere. `load` swaps in
+    /// whatever theme.json says before the file gets a look at it.
+    fn default() -> Self {
+        Self { theme: Theme::classic(), keymap: Keymap::default(), problems: Vec::new() }
+    }
 }
 
 impl Config {
@@ -22,14 +30,21 @@ impl Config {
 
     /// A missing file is not a problem -- it is the normal case.
     pub fn load() -> Self {
+        let base = palette::load_theme();
         match std::fs::read_to_string(Self::path()) {
-            Ok(text) => Self::parse(&text),
-            Err(_) => Self::default(),
+            Ok(text) => Self::parse_with(&text, base),
+            Err(_) => Self { theme: base, ..Self::default() },
         }
     }
 
+    /// Parses against a fixed base theme, which is what keeps tests off the
+    /// machine's own theme.json.
     pub fn parse(text: &str) -> Self {
-        let mut config = Self::default();
+        Self::parse_with(text, Theme::classic())
+    }
+
+    pub fn parse_with(text: &str, base: Theme) -> Self {
+        let mut config = Self { theme: base, ..Self::default() };
 
         let table: toml::Table = match text.parse() {
             Ok(table) => table,
@@ -48,30 +63,21 @@ impl Config {
         config
     }
 
-    /// `name` picks the preset and every other key overrides it, so the preset
-    /// has to be applied first whatever order the file is written in.
+    /// Only `name` lives here. Individual colours are guitar's `theme.json`
+    /// format, shared with guitar so the two never drift apart.
     fn read_theme(&mut self, section: &toml::Table) {
-        if let Some(value) = section.get("name") {
-            match value.as_str().and_then(Theme::preset) {
-                Some(theme) => self.theme = theme,
-                None => self.problems.push(format!("theme.name: unknown theme {value}, expected one of {}", palette::PRESETS.join(", "))),
-            }
-        }
-
         for (key, value) in section {
-            if key == "name" {
+            if key != "name" {
+                self.problems.push(format!("theme.{key}: only `name` belongs here -- individual colours live in theme.json, shared with guitar"));
                 continue;
             }
-            let Some(text) = value.as_str() else {
-                self.problems.push(format!("theme.{key}: expected a colour as a string, got {value}"));
+            let Some(label) = value.as_str() else {
+                self.problems.push(format!("theme.name: expected a theme name as a string, got {value}"));
                 continue;
             };
-            let Some(color) = palette::parse_color(text) else {
-                self.problems.push(format!("theme.{key}: {text:?} is not a colour -- use #rrggbb or a colour name"));
-                continue;
-            };
-            if !self.theme.set(key, color) {
-                self.problems.push(format!("theme.{key}: no such colour to set"));
+            match palette::preset_named(label) {
+                Some(theme) => self.theme = theme,
+                None => self.problems.push(format!("theme.name: unknown theme {label:?}")),
             }
         }
     }
@@ -82,11 +88,11 @@ impl Config {
                 self.problems.push(format!("keys.{action}: expected a key as a string, got {value}"));
                 continue;
             };
-            let Some(key) = keymap::parse_key(text) else {
-                self.problems.push(format!("keys.{action}: {text:?} is not a key"));
+            let Some(chord) = keymap::parse_chord(text) else {
+                self.problems.push(format!("keys.{action}: {text:?} is not a key -- try q, f12, ctrl+g, alt+enter"));
                 continue;
             };
-            if !self.keymap.set(action, key) {
+            if !self.keymap.set(action, chord) {
                 self.problems.push(format!("keys.{action}: no such action"));
             }
         }

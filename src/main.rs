@@ -35,7 +35,7 @@ CONFIG";
 fn print_help() {
     println!("{HELP}");
     println!("    {}", Config::path().display());
-    println!("    themes: {}", palette::PRESETS.join(", "));
+    println!("    themes: {} presets; colours come from theme.json, shared with guitar", palette::THEME_PRESETS.len());
     println!("    projects come from $ATRIUM_PROJECTS, else ~/projects");
 }
 
@@ -49,8 +49,8 @@ fn check_config() {
     if !path.exists() {
         println!("  (no file yet -- these are the defaults)");
     }
-    println!("  leader: {:?}", config.keymap.leader);
-    println!("  theme:  {:?}", config.theme.idle);
+    println!("  leader: {}", config.keymap.leader.label());
+    println!("  theme:  {}", config.theme.name.label());
     println!("  projects: {}", projects::default_root().display());
 
     if config.problems.is_empty() {

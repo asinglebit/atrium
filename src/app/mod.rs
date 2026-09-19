@@ -5,6 +5,7 @@ pub mod draw {
     pub mod modals {
         pub mod new_agent;
     }
+    pub mod pane;
     pub mod sidebar;
     pub mod stage;
 }

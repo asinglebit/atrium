@@ -102,6 +102,10 @@ impl App {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
+        // The agent paints its own cells; this is what colours everything it
+        // does not reach, so the chrome matches guitar rather than the terminal.
+        frame.render_widget(ratatui::widgets::Block::default().style(self.theme.background_style()), frame.area());
+
         let (sidebar, stage) = layout::split(frame.area());
         if let Some(area) = sidebar {
             draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner::frame_at(self.started.elapsed()));
@@ -124,7 +128,7 @@ impl App {
             return self.on_leader_chord(key);
         }
 
-        if key.code == self.keymap.leader && key.modifiers == KeyModifiers::NONE {
+        if self.keymap.leader.matches(&key) {
             self.leader_armed = true;
             return Ok(());
         }
@@ -136,22 +140,25 @@ impl App {
     /// known at run time.
     fn on_leader_chord(&mut self, key: KeyEvent) -> io::Result<()> {
         // Pressing the leader twice passes it through to the agent.
-        if key.code == self.keymap.leader {
+        if self.keymap.leader.matches(&key) {
             return self.send(key);
         }
 
-        let code = key.code;
-        if code == self.keymap.quit {
+        if self.keymap.quit.matches(&key) {
             self.should_quit = true;
-        } else if code == self.keymap.new {
+        } else if self.keymap.new.matches(&key) {
             self.open_picker();
-        } else if code == self.keymap.dismiss {
-            self.dismiss();
-        } else if code == self.keymap.next || code == KeyCode::Down {
+        } else if self.keymap.dismiss.matches(&key) || key.code == KeyCode::Down {
+            if key.code == KeyCode::Down {
+                self.registry.focus_next();
+            } else {
+                self.dismiss();
+            }
+        } else if self.keymap.next.matches(&key) {
             self.registry.focus_next();
-        } else if code == self.keymap.previous || code == KeyCode::Up {
+        } else if self.keymap.previous.matches(&key) || key.code == KeyCode::Up {
             self.registry.focus_prev();
-        } else if let KeyCode::Char(c @ '1'..='9') = code {
+        } else if let KeyCode::Char(c @ '1'..='9') = key.code {
             self.registry.focus_at(c as usize - '1' as usize);
         }
         Ok(())

@@ -12,6 +12,7 @@ pub mod helpers {
     pub mod json;
     pub mod palette;
     pub mod spinner;
+    pub mod text;
     pub mod version;
 }
 pub mod ipc {
@@ -23,3 +24,7 @@ pub mod ipc {
 pub use app::app::App;
 pub use core::{agent::AgentSpec, config::Config};
 pub use helpers::version::VERSION;
+
+#[cfg(test)]
+#[path = "tests/tree.rs"]
+mod tree_tests;

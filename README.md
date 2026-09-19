@@ -9,13 +9,16 @@ ssh, on a bare TTY — atrium neither knows nor cares. Run a second one in anoth
 pane and it holds its own, independent set.
 
 ```
- agents 2                │ ▐▛███▛█   Claude Code v2.1.278
- ⠙ 1 atrium              │▝▜██████▀  Opus 5 (1M context)
-     master *            │  ▝▝ ▝▝    ~/projects/personal/atrium
- ● 2 guitar              │
-     main                │ ❯ reply with exactly: pong
-                         │ ● pong
+ agents 3                 ▐▛███▛█   Claude Code v2.1.278
+ ⠙ 1 atrium     master*  ▝▜██████▀  Opus 5 (1M context)
+ ● 2 guitar        main    ▝▝ ▝▝    ~/projects/personal/guitar
+ ○ 3 bazzite       sway
+                          ❯ reply with exactly: pong
+                          ● pong
 ```
+
+Rows stripe and highlight exactly the way guitar's panes do, off the same
+`theme.json` — retheme one and the other follows.
 
 ## Install
 
@@ -54,14 +57,17 @@ Everything you type goes to the focused agent, except chords behind the leader,
 
 ```toml
 [theme]
-name = "greyscale"      # or "classic", "ansi"
-needs_input = "#ffffff" # any role can be overridden on top of the preset
+name = "one dark warmer"   # any of guitar's ~30 preset names
 
 [keys]
-leader = "f12"
+leader = "f12"             # or "ctrl+g", "alt+enter" -- modifiers are allowed
 quit = "q"
 new = "n"
 ```
+
+Individual colours are **not** set here: they live in `theme.json`, shared with
+guitar, so the two stay in step. With no config at all atrium uses whatever
+theme guitar is set to.
 
 `--check-config` names anything it could not use rather than failing silently.
 Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
@@ -161,8 +167,22 @@ enough to be free and fast enough that the `*` appears while you still care.
 **Unix only, deliberately.** The status channel is a unix socket. Windows would
 need a different transport, and nothing here needs it yet.
 
-**atrium's own colours are semantic, unlike guitar's.** guitar carries a
-general-purpose palette — thirty-two named colours across thirty presets.
-atrium has about six coloured things, so it names roles (`working`,
-`needs_input`, `error`) instead. Copying the palette over would have meant two
-copies of thirty themes drifting apart for no gain.
+**The palette is guitar's, copied verbatim, and the theme file is shared.**
+`src/helpers/palette.rs` is guitar's file with one function changed:
+`theme_path()` reads atrium's own `theme.json` if there is one and **guitar's
+otherwise**. So retheme guitar and atrium follows, with nothing to configure —
+which is the point. Statuses map onto that palette (`COLOR_RED`, `COLOR_AMBER`,
+`COLOR_GREEN`) rather than carrying colours of their own, so the two tools can
+never disagree about what red is.
+
+**Panes are drawn the way guitar draws them outside zen mode: no border.** Just
+padding, the themed background, and zebra-striped rows — selected row in
+`COLOR_GREY_800`, every other row in `COLOR_GREY_900`. `zebra_list_items` is
+lifted from guitar's `pane_window.rs`. The modal is the exception and does take
+a rounded edge, because it floats over the stage and needs one.
+
+**Test files are attached with `#[path]`, which is a footgun with a guard.**
+Rewriting a source file without its `#[cfg(test)] mod tests;` block removes its
+whole test file from the build, and the suite still passes — so nothing tells
+you. That happened here to the sidebar. `src/tests/tree.rs` now walks the tree
+and fails if any test file is not attached to something.

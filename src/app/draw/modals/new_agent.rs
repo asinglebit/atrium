@@ -3,11 +3,14 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState},
+    widgets::{Clear, List},
 };
 
 use crate::{
-    app::state::{layout, picker::Picker},
+    app::{
+        draw::pane,
+        state::{layout, picker::Picker},
+    },
     helpers::palette::Theme,
 };
 
@@ -21,7 +24,7 @@ pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker, theme: &Theme) {
     // Without this the stage shows through the gaps in the modal.
     frame.render_widget(Clear, area);
 
-    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme.border)).title(" new agent ");
+    let block = pane::modal_block(theme, " new agent ");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -32,29 +35,29 @@ pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker, theme: &Theme) {
         Line::from(vec![
             Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" "),
-            Span::raw(picker.kind()),
-            Span::styled("   enter hold · esc cancel", Style::default().fg(theme.dim)),
+            Span::styled(picker.kind(), Style::default().fg(theme.COLOR_GREY_300)),
+            Span::styled("   enter hold · esc cancel", Style::default().fg(theme.COLOR_GREY_600)),
         ]),
     ];
     frame.render_widget(ratatui::widgets::Paragraph::new(header_lines), header);
 
     if let Some(error) = picker.error() {
-        frame.render_widget(ratatui::widgets::Paragraph::new(Line::from(Span::styled(format!("  {error}"), Style::default().fg(theme.error)))).wrap(ratatui::widgets::Wrap { trim: true }), list_area);
+        frame.render_widget(
+            ratatui::widgets::Paragraph::new(Line::from(Span::styled(format!("  {error}"), Style::default().fg(theme.COLOR_RED)))).wrap(ratatui::widgets::Wrap { trim: true }),
+            list_area,
+        );
         return;
     }
 
     let matches = picker.matches();
     if matches.is_empty() {
-        frame.render_widget(ratatui::widgets::Paragraph::new(Line::from(Span::styled("  no project matches", Style::default().fg(theme.dim)))), list_area);
+        frame.render_widget(ratatui::widgets::Paragraph::new(Line::from(Span::styled("  no project matches", Style::default().fg(theme.COLOR_GREY_600)))), list_area);
         return;
     }
 
-    let items: Vec<ListItem> = matches.iter().map(|project| ListItem::new(Line::from(Span::raw(format!(" {}", project.name))))).collect();
-    let list = List::new(items).highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-
-    let mut state = ListState::default();
-    state.select(Some(picker.selected()));
-    frame.render_stateful_widget(list, list_area, &mut state);
+    let lines: Vec<Line> = matches.iter().map(|project| Line::from(Span::styled(project.name.clone(), Style::default().fg(theme.COLOR_GREY_300)))).collect();
+    let items = pane::zebra_list_items(lines, list_area.height as usize, picker.selected(), true, theme);
+    frame.render_widget(List::new(items), list_area);
 }
 
 #[cfg(test)]
