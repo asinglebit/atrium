@@ -28,14 +28,16 @@ KEYS
     Actions fire directly; every other key reaches the focused agent.
     ctrl+t  hold a new agent     ctrl+n / ctrl+p  next / previous
     ctrl+g  go to (1-9 jumps)    ctrl+o           show / hide the sidebar
-    ctrl+]  dismiss this one     ctrl+s           settings
+    ctrl+x  close this one       ctrl+s           settings
     ctrl+q  quit
 
-    The mouse works: click a row, wheel to scroll. Inside the agent it is
-    forwarded on, so the agent's own mouse support keeps working.
+    The mouse works: click a row, wheel to scroll, drag the line between the
+    panes to resize the sidebar, right-click anywhere for a menu. Inside the
+    agent everything else is forwarded on, so the agent's own mouse support
+    keeps working.
 
     Untouched, so the agent keeps them: ctrl+c, ctrl+d, ctrl+z, ctrl+v,
-    ctrl+x, ctrl+l, ctrl+r, ctrl+u, ctrl+w, ctrl+a, ctrl+e, ctrl+k, esc.
+    ctrl+l, ctrl+r, ctrl+u, ctrl+w, ctrl+a, ctrl+e, ctrl+k, esc.
 
 CONFIG";
 

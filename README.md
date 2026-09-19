@@ -9,16 +9,16 @@ ssh, on a bare TTY — atrium neither knows nor cares. Run a second one in anoth
 pane and it holds its own, independent set.
 
 ```
-  atrium |  ~/projects/personal/atrium                          agents
-╭────────────────────────────────────────────────────────────────────────╮
-│ agents 3          │ ▐▛███▛█   Claude Code v2.1.278                     │
-│ ⠙ 1 atrium master*│▝▜██████▀  Opus 5 (1M context)                      │
-│ ● 2 guitar   main │  ▝▝ ▝▝    ~/projects/personal/guitar               │
-│ ○ 3 bazzite  sway │                                                    │
-│                   │ ❯ reply with exactly: pong                         │
-│                   │ ● pong                                             │
-╰────────────────────────────────────────────────────────────────────────╯
-  guitar working  ● main                                              2/3
+  atrium |  ~/projects/personal/atrium                                            agents
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⠙ 1 atrium                         master* │ ▐▛███▛█   Claude Code v2.1.278            │
+│ ● 2 guitar                            main │▝▜██████▀  Opus 5 (1M context)             │
+│ ○ 3 bazzite                           sway │  ▝▝ ▝▝    ~/projects/personal/guitar      │
+│                                            │                                           │
+│                                            │ ❯ reply with exactly: pong                │
+│                                            │ ● pong                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────╯
+  guitar working  ● main                                                               2/3
 ```
 
 Title line, rounded frame, bordered panes, status line — guitar's chrome, off
@@ -43,17 +43,24 @@ atrium bash --norc     # hold anything else
 atrium --check-config  # what the config says, and what it got wrong
 ```
 
-Everything you type goes to the focused agent, except chords behind the leader,
-`F12`:
+Everything you type goes to the focused agent, except these, which fire
+directly — there is no leader to press first:
 
 | | |
 | --- | --- |
-| `F12 n` | hold a new agent — pick a project, pick a CLI |
-| `F12 x` | dismiss this one; dismissing the last ends atrium |
-| `F12 j` / `F12 k` | next / previous |
-| `F12 1`…`F12 9` | jump straight to that agent |
-| `F12 q` | quit |
-| `F12 F12` | send the leader itself to the agent |
+| `ctrl+t` | hold a new agent — pick a project, pick a CLI |
+| `ctrl+x` | close this one; closing the last ends atrium |
+| `ctrl+n` / `ctrl+p` | next / previous |
+| `ctrl+g` | go to, where `1`…`9` jump straight to a row |
+| `ctrl+o` | show or hide the sidebar |
+| `ctrl+s` | settings |
+| `ctrl+q` | quit |
+
+The mouse works too. Click a row to put it on the stage, wheel to scroll, and
+drag the line between the panes to resize the sidebar — the width is remembered.
+**Right-click anywhere for a menu**: on a row it offers that agent, anywhere
+else it offers the rest. Inside the agent every other mouse event is forwarded
+on, so the agent's own mouse support keeps working.
 
 ## Config
 
@@ -69,7 +76,7 @@ goto = "ctrl+g"
 settings = "ctrl+s"
 sidebar = "ctrl+o"
 new = "ctrl+t"
-dismiss = "ctrl+]"
+dismiss = "ctrl+x"
 next = "ctrl+n"
 previous = "ctrl+p"
 ```
@@ -91,10 +98,14 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/core/projects.rs` | Finds git repositories under the projects root |
 | `src/core/git.rs` | Branch and dirty flag for a sidebar row |
 | `src/core/config.rs` | Reads `config.toml`, keeping a list of what it got wrong |
+| `src/core/layout_config.rs` | The one thing atrium writes back: the sidebar's width, in `layout.json` |
 | `src/adapters/` | Per-CLI launch and status wiring — `claude`, and stubs for `opencode` and `codex` |
 | `src/ipc/server.rs` | The unix socket agents report back through |
 | `src/ipc/hook.rs` | The other end: `atrium hook <Event>` |
-| `src/app/draw/` | The sidebar, the stage, and the new-agent modal |
+| `src/app/draw/` | The sidebar, the stage, the settings view, the menu and the modals |
+| `src/app/state/layout.rs` | Where the sidebar, stage, title line and status line go |
+| `src/app/state/menu.rs` | What the right-click menu offers, and where its box lands |
+| `src/helpers/logo.rs` | The wordmark the settings view is headed with |
 | `src/app/input/keys.rs` | Turns a crossterm key into the bytes a terminal would have sent |
 | `src/tests/` | Mirrors the tree above; attached with `#[path]` from each source file |
 
@@ -112,12 +123,54 @@ ever matters, the change is to split a server out behind the same sidebar.
 **Actions fire directly, so every binding is a key taken from the agent.**
 There is no leader to press first, which makes the choice of defaults the whole
 design: `ctrl+letter` is a crowded space, and anything atrium claims the agent
-never sees. The five defaults are picked for what they cost rather than for the
-mnemonic — `ctrl+]` and `ctrl+q` cost essentially nothing, `ctrl+n`/`ctrl+p`
-cost shell history that Claude's own input box does not use, and `ctrl+t` costs
-readline's transpose. A test asserts no default lands on `ctrl+c`, `ctrl+d`,
-`ctrl+z`, `ctrl+v`, `ctrl+x`, `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`,
-`ctrl+e`, `ctrl+k` or `ctrl+[`.
+never sees. The defaults are picked for what they cost rather than for the
+mnemonic — `ctrl+q` and `ctrl+s` are XON and XOFF and raw mode has already
+turned flow control off, `ctrl+n`/`ctrl+p` cost shell history that Claude's own
+input box does not use, `ctrl+t` costs readline's transpose, and `ctrl+x` costs
+a two-key readline prefix whose second key an agent's input box does not
+implement. A test asserts no default lands on `ctrl+c`, `ctrl+d`, `ctrl+z`,
+`ctrl+v`, `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`, `ctrl+k`
+or `ctrl+[`.
+
+**A default also has to be a chord a terminal can actually deliver, which is
+narrower than it looks.** `ctrl+]` was the default for closing an agent and
+never once fired. atrium does not push the kitty keyboard flags, so it reads the
+legacy encoding, and there crossterm maps the bytes `0x1C`..`0x1F` onto
+`ctrl+4`..`ctrl+7` — `ctrl+]` is `0x1D`, so it arrives as `ctrl+5` and a chord
+written `ctrl+]` can never match. Outside a letter a terminal has a byte for
+almost nothing, which is the same fact behind `ctrl+1`..`ctrl+9` below. A test
+now asserts every default is a ctrl **letter**.
+
+**Closing an agent kills it, because letting go of the pty does not.** Dropping
+a session closes atrium's end, which only hangs the child up — a CLI is free to
+ignore that. `PtySession`'s `Drop` kills the child and then waits on it, so one
+closed agent is one ended process and no zombie left behind for as long as
+atrium runs. A test spawns a `sleep`, drops its session, and watches the pid
+leave `/proc`.
+
+**The sidebar squeezes before it disappears.** It opens at guitar's
+`LAYOUT_WIDTH_LEFT_PANE`, 45 columns, so the two tools open at the same
+proportions. That is wide enough that a fixed 45 would have left an 80-column
+terminal with no sidebar at all, so the width is clamped the way guitar clamps
+its own: down to 16 columns before it is dropped, and never far enough to take
+the agent below 40. Dragging the line between the panes sets it, and
+`layout.json` remembers it — written when the drag settles rather than on every
+frame of it, so one resize is one write. `config.toml` stays a file only you
+write.
+
+**The right-click menu claims a button that was doing nothing.** Mouse capture
+already suppresses the terminal's own menu, and the agent ignores a forwarded
+right-click, so before this there was no way to reach an action with the mouse —
+and none at all once the sidebar was hidden. On a row the menu offers that
+agent by name; anywhere else it offers what can be done regardless. It quotes
+the chord beside each entry, so it doubles as the place the keys are learnt.
+
+**The logo is purple, and it stands where guitar's heatmap stands.** guitar
+heads its settings with a contribution graph and lines every row up to its
+width; atrium has no commits to plot, so the wordmark takes that place and the
+column lines up to it. The two purples split across the rows the way guitar
+splits its own logo across two greens, and the `atrium` in the title line is the
+brighter of them.
 
 Nothing above atrium contends for these: sway is `Super+…` only, ghostty is
 `ctrl+shift+…`, and tmux claims `C-a` plus thirteen prefix-less `M-` bindings —
@@ -191,6 +244,11 @@ exactly what the unmodified function would have done. Statuses map onto that pal
 `COLOR_GREEN`) rather than carrying colours of their own, so the two tools can
 never disagree about what red is.
 
+**A pane carries no title, because the title costs the top row.** The sidebar
+used to be headed `agents 3`; the status line already says `2/3`, so the row was
+paying for something said twice. Losing it moves the first agent up to the
+pane's own top row, which `row_at` and the scroll trap are measured against.
+
 **The chrome is guitar's, in the same order guitar draws it:** background, then
 a rounded frame around everything, then a title line above it and a status line
 below, then the panes inside. A pane draws only the one edge that separates it
@@ -205,7 +263,7 @@ separator and the scroll position. ratatui draws *nothing* for a scrollbar whose
 content length is zero, though, so a list that fits would lose the separator
 entirely — `draw_gutter` falls back to a plain bordered block in that case.
 
-**`ctrl+1`..`ctrl+9` is not a thing, which is why there is a goto list.** A
+**`ctrl+1`..`ctrl+9` is not a thing either, which is why there is a goto list.** A
 terminal has no legacy encoding for ctrl and a digit: `ctrl+1` arrives as a bare
 `1`, indistinguishable from typing it, and `ctrl+2` arrives as NUL. tmux ships
 `extended-keys off` and does not model the key for `send-keys` either. So the

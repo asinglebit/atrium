@@ -4,12 +4,14 @@ pub mod core {
     pub mod agent;
     pub mod config;
     pub mod git;
+    pub mod layout_config;
     pub mod projects;
     pub mod pty;
     pub mod registry;
 }
 pub mod helpers {
     pub mod json;
+    pub mod logo;
     pub mod palette;
     pub mod scroll;
     pub mod spinner;

@@ -43,15 +43,19 @@ fn the_first_nine_rows_carry_a_jump_key() {
 }
 
 #[test]
-fn the_header_counts_what_is_held() {
-    let registry = registry_of(&["/tmp", "/usr", "/etc"]);
-    assert!(rendered(&registry).contains("agents 3"));
+fn the_top_line_is_an_agent_rather_than_a_heading() {
+    let registry = registry_of(&["/tmp", "/usr"]);
+    let out = rendered(&registry);
+
+    assert!(out.lines().next().is_some_and(|first| first.contains("tmp")), "the first agent should be on the first line:\n{out}");
 }
 
 #[test]
-fn an_empty_registry_still_draws_its_frame() {
+fn an_empty_registry_still_draws_the_line_between_the_panes() {
     let registry = Registry::new();
-    assert!(rendered(&registry).contains("agents 0"));
+    let out = rendered(&registry);
+
+    assert!(out.contains('\u{2502}'), "the separator should survive an empty list:\n{out}");
 }
 
 /// A real repository on a named branch, so a row has a branch to line up.
@@ -89,25 +93,25 @@ fn branches_share_one_right_aligned_column() {
     terminal.draw(|frame| draw(frame, frame.area(), &registry, &Theme::classic(), '.', 0)).expect("draw");
     let rows: Vec<String> = terminal.backend().buffer().content().chunks(40).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect();
 
-    // Rows 1 and 2 are the two agents; their branches must end at the same column.
+    // Rows 0 and 1 are the two agents; their branches must end at the same column.
     let end_of = |row: &String| row.trim_end().chars().count();
-    assert_eq!(end_of(&rows[1]), end_of(&rows[2]), "branches are ragged:\n{}\n{}", rows[1], rows[2]);
-    assert!(rows[1].contains("main"), "{}", rows[1]);
+    assert_eq!(end_of(&rows[0]), end_of(&rows[1]), "branches are ragged:\n{}\n{}", rows[0], rows[1]);
+    assert!(rows[0].contains("main"), "{}", rows[0]);
 }
 
 #[test]
 fn a_click_lands_on_the_row_under_it() {
     let area = Rect::new(0, 4, 26, 10);
-    // Row 4 is the title, so the first agent is on row 5.
-    assert_eq!(row_at(area, 0, 4), None, "the title line is not an agent");
-    assert_eq!(row_at(area, 0, 5), Some(0));
-    assert_eq!(row_at(area, 0, 7), Some(2));
+    // Nothing is spent on a heading, so the first agent is on the pane's own top row.
+    assert_eq!(row_at(area, 0, 3), None, "a click above the pane is not an agent");
+    assert_eq!(row_at(area, 0, 4), Some(0));
+    assert_eq!(row_at(area, 0, 6), Some(2));
 }
 
 #[test]
 fn a_click_accounts_for_how_far_the_list_is_scrolled() {
     let area = Rect::new(0, 4, 26, 10);
-    assert_eq!(row_at(area, 3, 5), Some(3), "the top row is row 3 once scrolled by three");
+    assert_eq!(row_at(area, 3, 4), Some(3), "the top row is row 3 once scrolled by three");
 }
 
 #[test]

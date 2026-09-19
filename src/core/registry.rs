@@ -65,10 +65,20 @@ impl Registry {
     }
 
     pub fn dismiss_focused(&mut self) -> Option<Agent> {
-        if self.agents.is_empty() {
+        self.dismiss_at(self.focus)
+    }
+
+    /// Ends one agent by row. Dropping the `Agent` is what kills it.
+    pub fn dismiss_at(&mut self, index: usize) -> Option<Agent> {
+        if index >= self.agents.len() {
             return None;
         }
-        let agent = self.agents.remove(self.focus);
+        let agent = self.agents.remove(index);
+        // A row removed above the focused one shifts it down, so the focus
+        // follows the agent it was on rather than sliding to its neighbour.
+        if index < self.focus {
+            self.focus -= 1;
+        }
         self.focus = self.focus.min(self.agents.len().saturating_sub(1));
         Some(agent)
     }

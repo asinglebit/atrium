@@ -10,11 +10,19 @@ use crate::{
     app::{
         draw,
         input::{keymap::Keymap, keys},
-        state::{goto::Goto, layout, layout::Layout, picker::Picker, settings::Settings},
+        state::{
+            goto::Goto,
+            layout,
+            layout::Layout,
+            menu::{Action, Menu},
+            picker::Picker,
+            settings::Settings,
+        },
     },
     core::{
         agent::{Agent, AgentSpec, Harness},
         config::Config,
+        layout_config::{self, LayoutConfig},
         projects,
         registry::Registry,
     },
@@ -38,8 +46,14 @@ pub struct App {
     modal: Option<Modal>,
     /// Some while the settings view has replaced the panes.
     settings: Option<Settings>,
+    /// Some while a right-click menu is up; it owns the keyboard and the mouse.
+    menu: Option<Menu>,
     sidebar_visible: bool,
     sidebar_scroll: usize,
+    /// How wide the sidebar is asked to be. Remembered across runs.
+    sidebar_width: u16,
+    /// True from grabbing the line between the panes until the button is let go.
+    dragging_sidebar: bool,
     /// The last layout drawn, which is what a click is measured against.
     layout: Layout,
     last_git: Instant,
@@ -50,6 +64,14 @@ pub struct App {
 enum Modal {
     NewAgent(Picker),
     Goto(Goto),
+}
+
+/// What an input did to the menu, worked out while the menu is borrowed so that
+/// acting on it can happen once the borrow is gone.
+enum Picked {
+    Nothing,
+    Close,
+    Act(Action),
 }
 
 /// What a key in the goto list amounts to, worked out before the registry is
@@ -77,7 +99,8 @@ impl App {
         // Agents call back into this same binary, so its path is the one to hand out.
         let harness = Harness { exe: std::env::current_exe()?, socket: server.path().to_path_buf() };
 
-        let stage = layout::compute(Rect::new(0, 0, cols, rows), true).stage;
+        let sidebar_width = layout_config::load().sidebar_width;
+        let stage = layout::compute(Rect::new(0, 0, cols, rows), true, sidebar_width).stage;
         let mut registry = Registry::new();
         registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
 
@@ -91,9 +114,12 @@ impl App {
             stage,
             modal: None,
             settings: None,
+            menu: None,
             sidebar_visible: true,
             sidebar_scroll: 0,
-            layout: layout::compute(Rect::new(0, 0, cols, rows), true),
+            sidebar_width,
+            dragging_sidebar: false,
+            layout: layout::compute(Rect::new(0, 0, cols, rows), true, sidebar_width),
             last_git: Instant::now(),
             should_quit: false,
         })
@@ -101,7 +127,7 @@ impl App {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.should_quit {
-            let stage = layout::compute(Rect::from(terminal.size()?), self.sidebar_visible && self.settings.is_none()).stage;
+            let stage = self.layout_for(Rect::from(terminal.size()?)).stage;
             self.stage = stage;
             self.registry.resize_all(stage.height, stage.width)?;
             for report in self.server.drain() {
@@ -130,7 +156,7 @@ impl App {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
-        let layout = layout::compute(frame.area(), self.sidebar_visible && self.settings.is_none());
+        let layout = self.layout_for(frame.area());
         self.layout = layout;
         let spinner = spinner::frame_at(self.started.elapsed());
 
@@ -142,17 +168,11 @@ impl App {
         let cwd = self.registry.focused().map_or_else(String::new, |agent| agent.cwd().display().to_string());
         draw::title::draw(frame, &layout, &self.theme, &cwd, self.view_name());
 
-        if self.settings.is_some() {
-            let visible = layout.stage.height.saturating_sub(draw::settings::HEADER_HEIGHT) as usize;
-            if let Some(settings) = &mut self.settings {
-                settings.scroll = scroll::trap(settings.selected(), settings.scroll, settings.len(), visible);
-            }
-            if let Some(settings) = &self.settings {
-                draw::settings::draw(frame, layout.stage, settings, &self.keymap, &self.theme);
-            }
+        if let Some(settings) = &mut self.settings {
+            draw::settings::draw(frame, layout.stage, settings, &self.keymap, &self.theme);
         } else {
             if let Some(area) = layout.sidebar {
-                self.sidebar_scroll = scroll::trap(self.registry.focus(), self.sidebar_scroll, self.registry.len(), area.height.saturating_sub(1) as usize);
+                self.sidebar_scroll = scroll::trap(self.registry.focus(), self.sidebar_scroll, self.registry.len(), area.height as usize);
                 draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, self.sidebar_scroll);
             }
             if let Some(agent) = self.registry.focused() {
@@ -166,6 +186,17 @@ impl App {
             Some(Modal::Goto(goto)) => draw::modals::goto::draw(frame, frame.area(), goto, &self.registry, &self.theme, spinner),
             None => {},
         }
+
+        // Last, so it floats over whatever was right-clicked.
+        if let Some(menu) = &self.menu {
+            draw::menu::draw(frame, frame.area(), menu, &self.theme);
+        }
+    }
+
+    /// The settings view takes the whole inside, so it hides the sidebar for as
+    /// long as it is open without changing what the sidebar key last said.
+    fn layout_for(&self, full: Rect) -> Layout {
+        layout::compute(full, self.sidebar_visible && self.settings.is_none(), self.sidebar_width)
     }
 
     /// What the top right corner says you are looking at.
@@ -179,6 +210,10 @@ impl App {
     }
 
     fn on_key(&mut self, key: KeyEvent) -> io::Result<()> {
+        if self.menu.is_some() {
+            self.on_menu_key(key);
+            return Ok(());
+        }
         if self.settings.is_some() {
             self.on_settings_key(key);
             return Ok(());
@@ -230,6 +265,29 @@ impl App {
         let layout = self.layout;
         let at = (mouse.column, mouse.row);
 
+        // A drag that began on the sidebar's edge keeps the mouse until the
+        // button is let go, however far outside the sidebar it has wandered.
+        if self.dragging_sidebar {
+            match mouse.kind {
+                MouseEventKind::Drag(MouseButton::Left) => self.resize_sidebar(mouse.column),
+                MouseEventKind::Up(MouseButton::Left) => {
+                    self.dragging_sidebar = false;
+                    // Written once the drag settles rather than on every frame
+                    // of it, so one resize is one write.
+                    layout_config::save(&LayoutConfig { sidebar_width: self.sidebar_width });
+                },
+                _ => {},
+            }
+            return Ok(());
+        }
+        // The menu owns the mouse for as long as it is up.
+        if self.menu.is_some() {
+            return self.on_menu_mouse(mouse);
+        }
+        if mouse.kind == MouseEventKind::Down(MouseButton::Right) {
+            self.open_menu(at);
+            return Ok(());
+        }
         if self.settings.is_some() {
             self.on_settings_mouse(mouse, layout.stage);
             return Ok(());
@@ -257,12 +315,24 @@ impl App {
             MouseEventKind::ScrollDown => self.sidebar_scroll = self.sidebar_scroll.saturating_add(1),
             MouseEventKind::ScrollUp => self.sidebar_scroll = self.sidebar_scroll.saturating_sub(1),
             MouseEventKind::Down(MouseButton::Left) => {
-                if let Some(index) = draw::sidebar::row_at(area, self.sidebar_scroll, mouse.row) {
+                // The sidebar's last column is the line between the panes, so
+                // that is what there is to grab.
+                if mouse.column == area.x.saturating_add(area.width).saturating_sub(1) {
+                    self.dragging_sidebar = true;
+                } else if let Some(index) = draw::sidebar::row_at(area, self.sidebar_scroll, mouse.row) {
                     self.registry.focus_at(index);
                 }
             },
             _ => {},
         }
+    }
+
+    /// The column under the cursor becomes the sidebar's last column, which is
+    /// the line being dragged.
+    fn resize_sidebar(&mut self, column: u16) {
+        let left = self.layout.app.x.saturating_add(1);
+        let want = column.saturating_sub(left).saturating_add(1);
+        self.sidebar_width = layout::clamp_sidebar(want, self.layout.app.width.saturating_sub(2));
     }
 
     fn on_settings_mouse(&mut self, mouse: MouseEvent, area: Rect) {
@@ -273,9 +343,9 @@ impl App {
             MouseEventKind::ScrollDown => settings.move_down(),
             MouseEventKind::ScrollUp => settings.move_up(),
             MouseEventKind::Down(MouseButton::Left) => {
-                if let Some(tab) = draw::settings::tab_at(area, mouse.column, mouse.row) {
+                if let Some(tab) = draw::settings::tab_at(settings, area, mouse.column, mouse.row) {
                     settings.open(tab);
-                } else if let Some(index) = draw::settings::row_at(area, settings.scroll, mouse.row) {
+                } else if let Some(index) = draw::settings::row_at(settings, area, mouse.row) {
                     settings.select(index);
                 }
             },
@@ -407,9 +477,125 @@ impl App {
     /// Dropping the last agent ends atrium: it exists to hold them, so holding
     /// none leaves nothing to show.
     fn dismiss(&mut self) {
-        self.registry.dismiss_focused();
+        self.dismiss_at(self.registry.focus());
+    }
+
+    fn dismiss_at(&mut self, index: usize) {
+        self.registry.dismiss_at(index);
         if self.registry.is_empty() {
             self.should_quit = true;
+        }
+    }
+
+    /// A right-click on a row offers what can be done to that agent; anywhere
+    /// else offers what can be done regardless of where you clicked.
+    fn open_menu(&mut self, at: (u16, u16)) {
+        if self.settings.is_some() || self.modal.is_some() {
+            return;
+        }
+
+        let clicked = self
+            .layout
+            .sidebar
+            .filter(|sidebar| within(*sidebar, at))
+            .and_then(|sidebar| draw::sidebar::row_at(sidebar, self.sidebar_scroll, at.1))
+            .and_then(|index| self.registry.agents().get(index).map(|agent| (index, agent.name.clone())));
+
+        self.menu = Some(match clicked {
+            Some((index, name)) => Menu::for_agent(at, index, &name, &self.keymap),
+            None => {
+                let focused = self.registry.focused().map(|agent| (self.registry.focus(), agent.name.clone()));
+                Menu::general(at, focused.as_ref().map(|(index, name)| (*index, name.as_str())), &self.keymap)
+            },
+        });
+    }
+
+    /// While the menu is up it owns the keyboard, the same way a modal does.
+    fn on_menu_key(&mut self, key: KeyEvent) {
+        let picked = {
+            let Some(menu) = &mut self.menu else {
+                return;
+            };
+            match key.code {
+                KeyCode::Esc => Picked::Close,
+                KeyCode::Enter => menu.picked().map_or(Picked::Close, Picked::Act),
+                KeyCode::Char('j') | KeyCode::Down => {
+                    menu.move_down();
+                    Picked::Nothing
+                },
+                KeyCode::Char('k') | KeyCode::Up => {
+                    menu.move_up();
+                    Picked::Nothing
+                },
+                _ => Picked::Nothing,
+            }
+        };
+        self.settle(picked);
+    }
+
+    fn on_menu_mouse(&mut self, mouse: MouseEvent) -> io::Result<()> {
+        let full = self.layout.full;
+        let (column, row) = (mouse.column, mouse.row);
+
+        let picked = {
+            let Some(menu) = &mut self.menu else {
+                return Ok(());
+            };
+            match mouse.kind {
+                MouseEventKind::ScrollDown => {
+                    menu.move_down();
+                    Picked::Nothing
+                },
+                MouseEventKind::ScrollUp => {
+                    menu.move_up();
+                    Picked::Nothing
+                },
+                // The cursor moving over an entry selects it, so what a click
+                // will do is always the thing under the pointer.
+                MouseEventKind::Moved => {
+                    if let Some(index) = menu.item_at(full, column, row) {
+                        menu.select(index);
+                    }
+                    Picked::Nothing
+                },
+                MouseEventKind::Down(_) => match menu.item_at(full, column, row) {
+                    Some(index) => {
+                        menu.select(index);
+                        menu.picked().map_or(Picked::Close, Picked::Act)
+                    },
+                    // A click on the border is still a click on the menu.
+                    None if menu.covers(full, column, row) => Picked::Nothing,
+                    None => Picked::Close,
+                },
+                _ => Picked::Nothing,
+            }
+        };
+        self.settle(picked);
+        Ok(())
+    }
+
+    /// Closes the menu if the last input finished with it, and does whatever it
+    /// was asked for once the borrow on it is gone.
+    fn settle(&mut self, picked: Picked) {
+        match picked {
+            Picked::Nothing => {},
+            Picked::Close => self.menu = None,
+            Picked::Act(action) => {
+                self.menu = None;
+                self.take_menu_action(action);
+            },
+        }
+    }
+
+    fn take_menu_action(&mut self, action: Action) {
+        match action {
+            Action::Focus(index) => self.registry.focus_at(index),
+            Action::Dismiss(index) => self.dismiss_at(index),
+            Action::New => self.open_picker(),
+            Action::Sidebar => self.sidebar_visible = !self.sidebar_visible,
+            Action::Settings => self.settings = Some(Settings::new(&self.theme)),
+            Action::Quit => self.should_quit = true,
+            Action::Separator => {},
         }
     }
 

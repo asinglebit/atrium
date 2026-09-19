@@ -16,7 +16,8 @@ pub fn draw(frame: &mut Frame, layout: &Layout, theme: &Theme, cwd: &str, view: 
     let room = layout.title_left.width.saturating_sub(15) as usize;
 
     let left = Line::from(vec![
-        Span::styled("  atrium", Style::default().fg(theme.COLOR_GREY_300)),
+        // atrium's own colour, the same purple the logo is drawn in.
+        Span::styled("  atrium", Style::default().fg(theme.COLOR_PURPLE)),
         Span::styled(" |", Style::default().fg(theme.COLOR_TEXT)),
         Span::styled(format!(" {FOLDER} {}", truncate_start(cwd, room)), Style::default().fg(theme.COLOR_TEXT)),
     ]);

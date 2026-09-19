@@ -92,6 +92,21 @@ impl PtySession {
     pub fn is_alive(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(None))
     }
+
+    pub fn pid(&self) -> Option<u32> {
+        self.child.process_id()
+    }
+}
+
+/// Dismissing an agent drops its session, and dropping one has to end the
+/// child. Letting the pty close on its own only hangs the child up, which a CLI
+/// is free to ignore -- and waiting afterwards reaps it, so a dismissed agent
+/// leaves no zombie behind for as long as atrium runs.
+impl Drop for PtySession {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 #[cfg(test)]

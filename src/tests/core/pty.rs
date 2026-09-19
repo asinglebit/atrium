@@ -1,5 +1,15 @@
 use super::*;
-use std::time::{Duration, Instant};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
+
+/// The same liveness test the socket sweep uses, and the reason this one test
+/// is Linux-only.
+#[cfg(target_os = "linux")]
+fn is_running(pid: u32) -> bool {
+    Path::new(&format!("/proc/{pid}")).exists()
+}
 
 /// Spins until the agent's screen says what we are waiting for, or gives up.
 fn wait_for(session: &PtySession, needle: &str) -> bool {
@@ -57,4 +67,23 @@ fn a_finished_child_stops_being_alive() {
         thread::sleep(Duration::from_millis(20));
     }
     assert!(!session.is_alive(), "child should have been reaped");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn dropping_a_session_ends_its_child() {
+    let mut cmd = CommandBuilder::new("sleep");
+    cmd.args(["60"]);
+
+    let session = PtySession::spawn(cmd, 24, 80).expect("pty should open");
+    let pid = session.pid().expect("a spawned child has a pid");
+    assert!(is_running(pid), "the child should have started");
+
+    drop(session);
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while is_running(pid) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!is_running(pid), "the child outlived the session that held it");
 }

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn the_frame_sits_between_a_title_line_and_a_status_line() {
-    let layout = compute(Rect::new(0, 0, 100, 30), true);
+    let layout = compute(Rect::new(0, 0, 100, 30), true, SIDEBAR_WIDTH);
 
     assert_eq!(layout.title_left.y, 0);
     assert_eq!(layout.title_left.height, 1);
@@ -13,7 +13,7 @@ fn the_frame_sits_between_a_title_line_and_a_status_line() {
 
 #[test]
 fn the_title_and_status_lines_are_split_into_halves_that_tile() {
-    let layout = compute(Rect::new(0, 0, 100, 30), true);
+    let layout = compute(Rect::new(0, 0, 100, 30), true, SIDEBAR_WIDTH);
 
     assert_eq!(layout.title_left.width + layout.title_right.width, 100);
     assert_eq!(layout.title_left.x + layout.title_left.width, layout.title_right.x);
@@ -22,7 +22,7 @@ fn the_title_and_status_lines_are_split_into_halves_that_tile() {
 
 #[test]
 fn the_panes_sit_inside_the_frames_border() {
-    let layout = compute(Rect::new(0, 0, 100, 30), true);
+    let layout = compute(Rect::new(0, 0, 100, 30), true, SIDEBAR_WIDTH);
     let sidebar = layout.sidebar.expect("wide frame should afford a sidebar");
 
     assert_eq!(sidebar.x, layout.app.x + 1, "a pane must not sit on the frame's border");
@@ -33,7 +33,7 @@ fn the_panes_sit_inside_the_frames_border() {
 
 #[test]
 fn the_sidebar_and_stage_tile_the_space_inside_the_frame() {
-    let layout = compute(Rect::new(0, 0, 100, 30), true);
+    let layout = compute(Rect::new(0, 0, 100, 30), true, SIDEBAR_WIDTH);
     let sidebar = layout.sidebar.expect("sidebar");
 
     assert_eq!(sidebar.width, SIDEBAR_WIDTH);
@@ -43,7 +43,7 @@ fn the_sidebar_and_stage_tile_the_space_inside_the_frame() {
 
 #[test]
 fn a_narrow_frame_gives_the_whole_inside_to_the_agent() {
-    let layout = compute(Rect::new(0, 0, SIDEBAR_WIDTH + MIN_STAGE_WIDTH, 30), true);
+    let layout = compute(Rect::new(0, 0, MIN_SIDEBAR_WIDTH + MIN_STAGE_WIDTH, 30), true, SIDEBAR_WIDTH);
 
     assert!(layout.sidebar.is_none(), "sidebar should be dropped rather than squeeze the agent");
     assert_eq!(layout.stage.width, layout.app.width - 2);
@@ -52,16 +52,26 @@ fn a_narrow_frame_gives_the_whole_inside_to_the_agent() {
 #[test]
 fn the_threshold_is_the_first_inside_width_that_fits_both() {
     // Two more columns than the panes need, because the frame's border takes them.
-    let layout = compute(Rect::new(0, 0, SIDEBAR_WIDTH + MIN_STAGE_WIDTH + 2, 30), true);
+    let layout = compute(Rect::new(0, 0, MIN_SIDEBAR_WIDTH + MIN_STAGE_WIDTH + 2, 30), true, SIDEBAR_WIDTH);
 
-    assert!(layout.sidebar.is_some());
+    assert_eq!(layout.sidebar.expect("sidebar").width, MIN_SIDEBAR_WIDTH);
     assert_eq!(layout.stage.width, MIN_STAGE_WIDTH);
+}
+
+#[test]
+fn a_frame_too_narrow_for_the_full_width_squeezes_the_sidebar_instead_of_dropping_it() {
+    let layout = compute(Rect::new(0, 0, SIDEBAR_WIDTH + MIN_STAGE_WIDTH, 30), true, SIDEBAR_WIDTH);
+    let sidebar = layout.sidebar.expect("a squeezed sidebar is still a sidebar");
+
+    assert!(sidebar.width < SIDEBAR_WIDTH, "it should have given ground");
+    assert!(sidebar.width >= MIN_SIDEBAR_WIDTH);
+    assert_eq!(layout.stage.width, MIN_STAGE_WIDTH, "the agent keeps its minimum");
 }
 
 #[test]
 fn a_frame_too_short_for_chrome_still_produces_something_drawable() {
     for height in 0..4 {
-        let layout = compute(Rect::new(0, 0, 100, height), true);
+        let layout = compute(Rect::new(0, 0, 100, height), true, SIDEBAR_WIDTH);
         assert!(layout.app.height <= height);
         assert!(layout.stage.height <= height);
     }
@@ -96,8 +106,39 @@ fn a_footer_taller_than_the_box_takes_all_of_it() {
 
 #[test]
 fn switching_the_sidebar_off_gives_the_agent_the_whole_inside() {
-    let layout = compute(Rect::new(0, 0, 100, 30), false);
+    let layout = compute(Rect::new(0, 0, 100, 30), false, SIDEBAR_WIDTH);
 
     assert!(layout.sidebar.is_none());
     assert_eq!(layout.stage.width, layout.app.width - 2);
+}
+
+#[test]
+fn the_sidebar_is_as_wide_as_it_is_asked_to_be() {
+    let layout = compute(Rect::new(0, 0, 120, 30), true, 60);
+
+    assert_eq!(layout.sidebar.expect("sidebar").width, 60);
+    assert_eq!(layout.stage.width, 118 - 60);
+}
+
+#[test]
+fn a_width_wider_than_the_frame_leaves_the_agent_its_minimum() {
+    let layout = compute(Rect::new(0, 0, 100, 30), true, 500);
+
+    assert_eq!(layout.stage.width, MIN_STAGE_WIDTH);
+    assert_eq!(layout.sidebar.expect("sidebar").width, 98 - MIN_STAGE_WIDTH);
+}
+
+#[test]
+fn a_width_narrower_than_a_row_is_widened_to_one() {
+    let layout = compute(Rect::new(0, 0, 100, 30), true, 1);
+
+    assert_eq!(layout.sidebar.expect("sidebar").width, MIN_SIDEBAR_WIDTH);
+}
+
+#[test]
+fn clamping_keeps_a_width_between_the_two_minimums() {
+    assert_eq!(clamp_sidebar(45, 98), 45, "a width that fits is left alone");
+    assert_eq!(clamp_sidebar(0, 98), MIN_SIDEBAR_WIDTH);
+    assert_eq!(clamp_sidebar(u16::MAX, 98), 98 - MIN_STAGE_WIDTH);
+    assert_eq!(clamp_sidebar(45, 20), MIN_SIDEBAR_WIDTH, "too little room for either minimum still gives a usable number");
 }

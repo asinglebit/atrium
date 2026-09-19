@@ -73,14 +73,19 @@ fn key_name(code: KeyCode) -> String {
 /// - `ctrl+t` transposes characters in readline, and opens Claude's todo panel.
 /// - `ctrl+n` / `ctrl+p` walk shell history; Claude's own box uses the arrows.
 /// - `ctrl+g` aborts a readline entry, which is rarely asked for on purpose.
-/// - `ctrl+]` is the telnet escape, which nothing in a TUI wants.
+/// - `ctrl+x` opens a two-key readline prefix, and an agent's own input box
+///   implements no second key to follow it.
 /// - `ctrl+q` and `ctrl+s` are XON and XOFF, and raw mode has already turned
 ///   flow control off, so neither can freeze anything.
 /// - `ctrl+o` is readline's operate-and-get-next, which nothing asks for.
 ///
-/// Deliberately untouched: `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+x`,
-/// `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`, `ctrl+k` and
-/// `ctrl+[`, which is Escape.
+/// Deliberately untouched: `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+l`,
+/// `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`, `ctrl+k` and `ctrl+[`,
+/// which is Escape.
+///
+/// A default also has to be a chord a terminal can deliver, which is narrower
+/// than it looks: outside a letter there is usually no byte for it. `ctrl+]`
+/// was the default here and never once fired, because it arrives as `ctrl+5`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Keymap {
     pub quit: Chord,
@@ -99,7 +104,7 @@ fn ctrl(c: char) -> Chord {
 
 impl Default for Keymap {
     fn default() -> Self {
-        Self { quit: ctrl('q'), goto: ctrl('g'), settings: ctrl('s'), sidebar: ctrl('o'), new: ctrl('t'), dismiss: ctrl(']'), next: ctrl('n'), previous: ctrl('p') }
+        Self { quit: ctrl('q'), goto: ctrl('g'), settings: ctrl('s'), sidebar: ctrl('o'), new: ctrl('t'), dismiss: ctrl('x'), next: ctrl('n'), previous: ctrl('p') }
     }
 }
 

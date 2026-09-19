@@ -12,7 +12,7 @@ pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry, theme: &Theme, s
     let body = Rect { width: split, ..area };
     let gutter = Rect { x: area.x + split, width: 1, ..area };
 
-    let block = pane::block(theme, format!(" agents {} ", registry.len()));
+    let block = pane::block(theme);
     let inner = block.inner(body);
     frame.render_widget(block, body);
 
@@ -28,10 +28,9 @@ pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry, theme: &Theme, s
 }
 
 /// Which agent is under a click. Lives here so it cannot drift from the layout
-/// the draw above actually used: one title line, then a row per agent.
+/// the draw above actually used: a row per agent, starting at the top.
 pub fn row_at(area: Rect, offset: usize, row: u16) -> Option<usize> {
-    let first = area.y.checked_add(1)?;
-    (row >= first && row < area.y.saturating_add(area.height)).then(|| offset + usize::from(row - first))
+    (row >= area.y && row < area.y.saturating_add(area.height)).then(|| offset + usize::from(row - area.y))
 }
 
 #[cfg(test)]

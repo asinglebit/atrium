@@ -119,11 +119,25 @@ fn every_action_fires_on_a_ctrl_chord() {
 fn no_default_takes_a_key_the_agent_needs() {
     // ctrl+[ is Escape, and the rest are signals or readline editing that a
     // shell or an agent would miss immediately.
-    const RESERVED: [char; 13] = ['c', 'd', 'z', 'v', 'x', 'l', 'r', 'u', 'w', 'a', 'e', 'k', '['];
+    const RESERVED: [char; 12] = ['c', 'd', 'z', 'v', 'l', 'r', 'u', 'w', 'a', 'e', 'k', '['];
 
     for chord in Keymap::default().claimed() {
         if let KeyCode::Char(c) = chord.code {
             assert!(!RESERVED.contains(&c.to_ascii_lowercase()), "ctrl+{c} belongs to the agent");
+        }
+    }
+}
+
+#[test]
+fn no_default_is_a_chord_a_terminal_cannot_deliver() {
+    // The legacy encoding has a byte for ctrl plus a letter and for very little
+    // else: ctrl+] arrives as ctrl+5, and ctrl+1 as a bare 1. A default bound to
+    // either could never fire, which is exactly what ctrl+] did here.
+    for chord in Keymap::default().claimed() {
+        if chord.modifiers.contains(KeyModifiers::CONTROL)
+            && let KeyCode::Char(c) = chord.code
+        {
+            assert!(c.is_ascii_alphabetic(), "ctrl+{c} never reaches an application as itself");
         }
     }
 }
@@ -139,7 +153,7 @@ fn every_action_is_distinct_by_default() {
 #[test]
 fn an_unclaimed_chord_is_not_mistaken_for_an_action() {
     let claimed = Keymap::default().claimed();
-    for c in ['c', 'd', 'z', 'v', 'x'] {
+    for c in ['c', 'd', 'z', 'v', 'l'] {
         let pressed = press(KeyCode::Char(c), KeyModifiers::CONTROL);
         assert!(!claimed.iter().any(|chord| chord.matches(&pressed)), "ctrl+{c} should reach the agent");
     }

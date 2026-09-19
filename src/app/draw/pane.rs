@@ -20,8 +20,11 @@ const THUMB: &str = "▌";
 /// A pane, the way guitar draws one outside zen mode: no border at all, just
 /// padding and the themed background. The zebra striping below is what makes
 /// the column visible, which is why no line is needed to separate it.
-pub fn block<'a>(theme: &Theme, title: impl Into<Line<'a>>) -> Block<'a> {
-    Block::default().padding(Padding { left: 1, right: 1, top: 0, bottom: 0 }).title(title).title_style(Style::default().fg(theme.COLOR_GREY_600)).style(theme.background_style())
+///
+/// Untitled on purpose. A title costs the top row, and the status line already
+/// counts what is held.
+pub fn block(theme: &Theme) -> Block<'static> {
+    Block::default().padding(Padding { left: 1, right: 1, top: 0, bottom: 0 }).style(theme.background_style())
 }
 
 /// The modal floats over the stage, so unlike a pane it does need an edge.

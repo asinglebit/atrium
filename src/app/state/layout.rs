@@ -1,7 +1,12 @@
 use ratatui::layout::Rect;
 
-/// How wide the sidebar is when there is room for it.
-pub const SIDEBAR_WIDTH: u16 = 28;
+/// How wide the sidebar is when nothing squeezes it -- guitar's
+/// `LAYOUT_WIDTH_LEFT_PANE`, so the two open at the same proportions.
+pub const SIDEBAR_WIDTH: u16 = 45;
+
+/// Narrower than this and a row says nothing useful, so the sidebar is dropped
+/// instead. guitar's `LAYOUT_WIDTH_MIN_SIDE_PANE`.
+pub const MIN_SIDEBAR_WIDTH: u16 = 16;
 
 /// Below this the sidebar is dropped entirely rather than squeezing the agent
 /// into a column too narrow to work in.
@@ -11,6 +16,8 @@ pub const MIN_STAGE_WIDTH: u16 = 40;
 /// frame holding the panes, and a status line under it.
 #[derive(Clone, Copy, Debug)]
 pub struct Layout {
+    /// The whole terminal, which is what anything floating is placed against.
+    pub full: Rect,
     pub title_left: Rect,
     pub title_right: Rect,
     pub app: Rect,
@@ -29,7 +36,13 @@ fn halves(row: Rect) -> (Rect, Rect) {
     (Rect { width: left, ..row }, Rect { x: row.x + left, width: row.width - left, ..row })
 }
 
-pub fn compute(full: Rect, want_sidebar: bool) -> Layout {
+/// What a requested sidebar width becomes once the agent's minimum is taken out
+/// of the room available. Mirrors guitar's `side_pane_width`.
+pub fn clamp_sidebar(width: u16, inner_width: u16) -> u16 {
+    width.clamp(MIN_SIDEBAR_WIDTH, inner_width.saturating_sub(MIN_STAGE_WIDTH).max(MIN_SIDEBAR_WIDTH))
+}
+
+pub fn compute(full: Rect, want_sidebar: bool, sidebar_width: u16) -> Layout {
     // A title line above and a status line below, the frame taking the rest.
     let title = Rect { height: 1.min(full.height), ..full };
     let status_height = if full.height >= 3 { 1 } else { 0 };
@@ -39,18 +52,22 @@ pub fn compute(full: Rect, want_sidebar: bool) -> Layout {
     // The frame's own border is not floor space.
     let inner = Rect { x: app.x + 1, y: app.y + 1, width: app.width.saturating_sub(2), height: app.height.saturating_sub(2) };
 
-    let (sidebar, stage) = if !want_sidebar || inner.width < SIDEBAR_WIDTH + MIN_STAGE_WIDTH {
+    let (sidebar, stage) = if !want_sidebar || inner.width < MIN_SIDEBAR_WIDTH + MIN_STAGE_WIDTH {
         (None, inner)
     } else {
-        let sidebar = Rect { width: SIDEBAR_WIDTH, ..inner };
-        let stage = Rect { x: inner.x + SIDEBAR_WIDTH, width: inner.width - SIDEBAR_WIDTH, ..inner };
+        // A terminal too narrow for the asked-for width gets a squeezed sidebar
+        // rather than none at all; the guard above is what keeps the squeeze
+        // from going below MIN_SIDEBAR_WIDTH.
+        let width = clamp_sidebar(sidebar_width, inner.width);
+        let sidebar = Rect { width, ..inner };
+        let stage = Rect { x: inner.x + width, width: inner.width - width, ..inner };
         (Some(sidebar), stage)
     };
 
     let (title_left, title_right) = halves(title);
     let (statusbar_left, statusbar_right) = halves(statusbar);
 
-    Layout { title_left, title_right, app, sidebar, stage, statusbar_left, statusbar_right }
+    Layout { full, title_left, title_right, app, sidebar, stage, statusbar_left, statusbar_right }
 }
 
 /// A box of the given size in the middle of `full`, shrunk to fit if it does
