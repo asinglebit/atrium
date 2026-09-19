@@ -6,19 +6,22 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState},
 };
 
-use crate::app::state::{layout, picker::Picker};
+use crate::{
+    app::state::{layout, picker::Picker},
+    helpers::palette::Theme,
+};
 
 const WIDTH: u16 = 56;
 const HEIGHT: u16 = 16;
 
 /// The "hold something new" box: a filter, the CLI to launch, and the projects
 /// still matching.
-pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker) {
+pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker, theme: &Theme) {
     let area = layout::centered(WIDTH, HEIGHT, full);
     // Without this the stage shows through the gaps in the modal.
     frame.render_widget(Clear, area);
 
-    let block = Block::default().borders(Borders::ALL).title(" new agent ");
+    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme.border)).title(" new agent ");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -30,22 +33,19 @@ pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker) {
             Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" "),
             Span::raw(picker.kind()),
-            Span::styled("   enter hold · esc cancel", Style::default().add_modifier(Modifier::DIM)),
+            Span::styled("   enter hold · esc cancel", Style::default().fg(theme.dim)),
         ]),
     ];
     frame.render_widget(ratatui::widgets::Paragraph::new(header_lines), header);
 
     if let Some(error) = picker.error() {
-        frame.render_widget(
-            ratatui::widgets::Paragraph::new(Line::from(Span::styled(format!("  {error}"), Style::default().add_modifier(Modifier::BOLD)))).wrap(ratatui::widgets::Wrap { trim: true }),
-            list_area,
-        );
+        frame.render_widget(ratatui::widgets::Paragraph::new(Line::from(Span::styled(format!("  {error}"), Style::default().fg(theme.error)))).wrap(ratatui::widgets::Wrap { trim: true }), list_area);
         return;
     }
 
     let matches = picker.matches();
     if matches.is_empty() {
-        frame.render_widget(ratatui::widgets::Paragraph::new(Line::from(Span::styled("  no project matches", Style::default().add_modifier(Modifier::DIM)))), list_area);
+        frame.render_widget(ratatui::widgets::Paragraph::new(Line::from(Span::styled("  no project matches", Style::default().fg(theme.dim)))), list_area);
         return;
     }
 

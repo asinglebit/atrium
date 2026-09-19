@@ -1,5 +1,8 @@
 use super::*;
-use crate::core::agent::{Agent, AgentSpec, Harness};
+use crate::{
+    core::agent::{Agent, AgentSpec, Harness},
+    helpers::palette::Theme,
+};
 use ratatui::{Terminal, backend::TestBackend};
 
 fn harness() -> Harness {
@@ -17,7 +20,7 @@ fn registry_of(dirs: &[&str]) -> Registry {
 
 fn rendered(registry: &Registry) -> String {
     let mut terminal = Terminal::new(TestBackend::new(26, 6)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), registry, '.')).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), registry, &Theme::default(), '.')).expect("draw");
     terminal.backend().buffer().content().chunks(26).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 

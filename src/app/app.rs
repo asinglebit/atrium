@@ -9,22 +9,18 @@ use ratatui::{DefaultTerminal, Frame, layout::Rect};
 use crate::{
     app::{
         draw,
-        input::keys,
+        input::{keymap::Keymap, keys},
         state::{layout, picker::Picker},
     },
     core::{
         agent::{Agent, AgentSpec, Harness},
+        config::Config,
         projects,
         registry::Registry,
     },
-    helpers::spinner,
+    helpers::{palette::Theme, spinner},
     ipc::server::StatusServer,
 };
-
-/// atrium's own chords all live behind this one key, so every other keystroke
-/// can go straight through to the agent untouched. F12 is bound by nothing else
-/// in this stack -- not sway, ghostty, tmux, vim or readline.
-const LEADER: KeyCode = KeyCode::F(12);
 
 /// How often the branch and dirty flag are re-read. Slow enough that git status
 /// on a big repo never shows up as a stutter.
@@ -32,6 +28,8 @@ const GIT_INTERVAL: Duration = Duration::from_secs(3);
 
 pub struct App {
     registry: Registry,
+    theme: Theme,
+    keymap: Keymap,
     harness: Harness,
     server: StatusServer,
     started: Instant,
@@ -50,7 +48,7 @@ fn first_line(message: &str) -> String {
 }
 
 impl App {
-    pub fn new(spec: AgentSpec, rows: u16, cols: u16) -> io::Result<Self> {
+    pub fn new(spec: AgentSpec, config: Config, rows: u16, cols: u16) -> io::Result<Self> {
         let server = StatusServer::bind()?;
         // Agents call back into this same binary, so its path is the one to hand out.
         let harness = Harness { exe: std::env::current_exe()?, socket: server.path().to_path_buf() };
@@ -59,7 +57,19 @@ impl App {
         let mut registry = Registry::new();
         registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
 
-        Ok(Self { registry, harness, server, started: Instant::now(), stage, picker: None, last_git: Instant::now(), leader_armed: false, should_quit: false })
+        Ok(Self {
+            registry,
+            theme: config.theme,
+            keymap: config.keymap,
+            harness,
+            server,
+            started: Instant::now(),
+            stage,
+            picker: None,
+            last_git: Instant::now(),
+            leader_armed: false,
+            should_quit: false,
+        })
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -94,13 +104,13 @@ impl App {
     pub fn draw(&mut self, frame: &mut Frame) {
         let (sidebar, stage) = layout::split(frame.area());
         if let Some(area) = sidebar {
-            draw::sidebar::draw(frame, area, &self.registry, spinner::frame_at(self.started.elapsed()));
+            draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner::frame_at(self.started.elapsed()));
         }
         if let Some(agent) = self.registry.focused() {
             draw::stage::draw(frame, stage, agent.session());
         }
         if let Some(picker) = &self.picker {
-            draw::modals::new_agent::draw(frame, frame.area(), picker);
+            draw::modals::new_agent::draw(frame, frame.area(), picker, &self.theme);
         }
     }
 
@@ -114,7 +124,7 @@ impl App {
             return self.on_leader_chord(key);
         }
 
-        if key.code == LEADER && key.modifiers == KeyModifiers::NONE {
+        if key.code == self.keymap.leader && key.modifiers == KeyModifiers::NONE {
             self.leader_armed = true;
             return Ok(());
         }
@@ -122,23 +132,27 @@ impl App {
         self.send(key)
     }
 
+    /// Chords are compared rather than matched, because the keymap is only
+    /// known at run time.
     fn on_leader_chord(&mut self, key: KeyEvent) -> io::Result<()> {
         // Pressing the leader twice passes it through to the agent.
-        if key.code == LEADER {
+        if key.code == self.keymap.leader {
             return self.send(key);
         }
 
-        match key.code {
-            KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Char('n') => self.open_picker(),
-            KeyCode::Char('x') => self.dismiss(),
-            KeyCode::Char('j') | KeyCode::Down => self.registry.focus_next(),
-            KeyCode::Char('k') | KeyCode::Up => self.registry.focus_prev(),
-            KeyCode::Char(c @ '1'..='9') => {
-                let index = c as usize - '1' as usize;
-                self.registry.focus_at(index);
-            },
-            _ => {},
+        let code = key.code;
+        if code == self.keymap.quit {
+            self.should_quit = true;
+        } else if code == self.keymap.new {
+            self.open_picker();
+        } else if code == self.keymap.dismiss {
+            self.dismiss();
+        } else if code == self.keymap.next || code == KeyCode::Down {
+            self.registry.focus_next();
+        } else if code == self.keymap.previous || code == KeyCode::Up {
+            self.registry.focus_prev();
+        } else if let KeyCode::Char(c @ '1'..='9') = code {
+            self.registry.focus_at(c as usize - '1' as usize);
         }
         Ok(())
     }

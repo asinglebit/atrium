@@ -2,6 +2,7 @@ pub mod adapters;
 pub mod app;
 pub mod core {
     pub mod agent;
+    pub mod config;
     pub mod git;
     pub mod projects;
     pub mod pty;
@@ -9,7 +10,9 @@ pub mod core {
 }
 pub mod helpers {
     pub mod json;
+    pub mod palette;
     pub mod spinner;
+    pub mod version;
 }
 pub mod ipc {
     pub mod hook;
@@ -18,4 +21,5 @@ pub mod ipc {
 }
 
 pub use app::app::App;
-pub use core::agent::AgentSpec;
+pub use core::{agent::AgentSpec, config::Config};
+pub use helpers::version::VERSION;
