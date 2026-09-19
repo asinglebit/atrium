@@ -9,16 +9,20 @@ ssh, on a bare TTY — atrium neither knows nor cares. Run a second one in anoth
 pane and it holds its own, independent set.
 
 ```
- agents 3                 ▐▛███▛█   Claude Code v2.1.278
- ⠙ 1 atrium     master*  ▝▜██████▀  Opus 5 (1M context)
- ● 2 guitar        main    ▝▝ ▝▝    ~/projects/personal/guitar
- ○ 3 bazzite       sway
-                          ❯ reply with exactly: pong
-                          ● pong
+  atrium |  ~/projects/personal/atrium                          agents
+╭────────────────────────────────────────────────────────────────────────╮
+│ agents 3          │ ▐▛███▛█   Claude Code v2.1.278                     │
+│ ⠙ 1 atrium master*│▝▜██████▀  Opus 5 (1M context)                      │
+│ ● 2 guitar   main │  ▝▝ ▝▝    ~/projects/personal/guitar               │
+│ ○ 3 bazzite  sway │                                                    │
+│                   │ ❯ reply with exactly: pong                         │
+│                   │ ● pong                                             │
+╰────────────────────────────────────────────────────────────────────────╯
+  guitar working  ● main                                              2/3
 ```
 
-Rows stripe and highlight exactly the way guitar's panes do, off the same
-`theme.json` — retheme one and the other follows.
+Title line, rounded frame, bordered panes, status line — guitar's chrome, off
+the same `theme.json`. Retheme one and the other follows.
 
 ## Install
 
@@ -60,7 +64,8 @@ Everything you type goes to the focused agent, except chords behind the leader,
 name = "one dark warmer"   # any of guitar's ~30 preset names
 
 [keys]
-quit = "ctrl+q"            # any key or chord: "esc", "ctrl+g", "alt+enter"
+quit = "ctrl+q"            # any key or chord: "esc", "ctrl+y", "alt+enter"
+goto = "ctrl+g"
 new = "ctrl+t"
 dismiss = "ctrl+]"
 next = "ctrl+n"
@@ -182,11 +187,20 @@ which is the point. Statuses map onto that palette (`COLOR_RED`, `COLOR_AMBER`,
 `COLOR_GREEN`) rather than carrying colours of their own, so the two tools can
 never disagree about what red is.
 
-**Panes are drawn the way guitar draws them outside zen mode: no border.** Just
-padding, the themed background, and zebra-striped rows — selected row in
-`COLOR_GREY_800`, every other row in `COLOR_GREY_900`. `zebra_list_items` is
-lifted from guitar's `pane_window.rs`. The modal is the exception and does take
-a rounded edge, because it floats over the stage and needs one.
+**The chrome is guitar's, in the same order guitar draws it:** background, then
+a rounded frame around everything, then a title line above it and a status line
+below, then the panes inside. A pane draws only the one edge that separates it
+from the next — the frame already supplies the rest — so the line between the
+sidebar and the stage is single rather than doubled. Rows are zebra-striped with
+`zebra_list_items`, lifted from guitar's `pane_window.rs`: selected row in
+`COLOR_GREY_800`, every other row in `COLOR_GREY_900`.
+
+**`ctrl+1`..`ctrl+9` is not a thing, which is why there is a goto list.** A
+terminal has no legacy encoding for ctrl and a digit: `ctrl+1` arrives as a bare
+`1`, indistinguishable from typing it, and `ctrl+2` arrives as NUL. tmux ships
+`extended-keys off` and does not model the key for `send-keys` either. So the
+numbers on the rows are jumped to from inside `ctrl+g`, where the modal owns the
+keyboard and a plain digit means what it says.
 
 **Test files are attached with `#[path]`, which is a footgun with a guard.**
 Rewriting a source file without its `#[cfg(test)] mod tests;` block removes its

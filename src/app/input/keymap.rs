@@ -72,6 +72,7 @@ fn key_name(code: KeyCode) -> String {
 ///
 /// - `ctrl+t` transposes characters in readline, and opens Claude's todo panel.
 /// - `ctrl+n` / `ctrl+p` walk shell history; Claude's own box uses the arrows.
+/// - `ctrl+g` aborts a readline entry, which is rarely asked for on purpose.
 /// - `ctrl+]` is the telnet escape, which nothing in a TUI wants.
 /// - `ctrl+q` is XON, and raw mode has already turned flow control off.
 ///
@@ -81,6 +82,7 @@ fn key_name(code: KeyCode) -> String {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Keymap {
     pub quit: Chord,
+    pub goto: Chord,
     pub new: Chord,
     pub dismiss: Chord,
     pub next: Chord,
@@ -93,7 +95,7 @@ fn ctrl(c: char) -> Chord {
 
 impl Default for Keymap {
     fn default() -> Self {
-        Self { quit: ctrl('q'), new: ctrl('t'), dismiss: ctrl(']'), next: ctrl('n'), previous: ctrl('p') }
+        Self { quit: ctrl('q'), goto: ctrl('g'), new: ctrl('t'), dismiss: ctrl(']'), next: ctrl('n'), previous: ctrl('p') }
     }
 }
 
@@ -102,6 +104,7 @@ impl Keymap {
     pub fn set(&mut self, action: &str, chord: Chord) -> bool {
         match action {
             "quit" => self.quit = chord,
+            "goto" => self.goto = chord,
             "new" => self.new = chord,
             "dismiss" => self.dismiss = chord,
             "next" => self.next = chord,
@@ -112,8 +115,8 @@ impl Keymap {
     }
 
     /// Every chord atrium claims, so the agent can be told what it will not see.
-    pub fn claimed(&self) -> [Chord; 5] {
-        [self.quit, self.new, self.dismiss, self.next, self.previous]
+    pub fn claimed(&self) -> [Chord; 6] {
+        [self.quit, self.goto, self.new, self.dismiss, self.next, self.previous]
     }
 }
 
