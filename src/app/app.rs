@@ -7,9 +7,14 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use ratatui::{DefaultTerminal, Frame, layout::Rect};
 
 use crate::{
-    app::{draw, input::keys, state::layout},
+    app::{
+        draw,
+        input::keys,
+        state::{layout, picker::Picker},
+    },
     core::{
         agent::{Agent, AgentSpec, Harness},
+        projects,
         registry::Registry,
     },
     helpers::spinner,
@@ -21,15 +26,27 @@ use crate::{
 /// in this stack -- not sway, ghostty, tmux, vim or readline.
 const LEADER: KeyCode = KeyCode::F(12);
 
+/// How often the branch and dirty flag are re-read. Slow enough that git status
+/// on a big repo never shows up as a stutter.
+const GIT_INTERVAL: Duration = Duration::from_secs(3);
+
 pub struct App {
     registry: Registry,
-    spec: AgentSpec,
     harness: Harness,
     server: StatusServer,
     started: Instant,
     stage: Rect,
+    /// Some while the new-agent modal is up; input goes to it instead of the agent.
+    picker: Option<Picker>,
+    last_git: Instant,
     leader_armed: bool,
     should_quit: bool,
+}
+
+/// Spawn failures arrive as a paragraph naming every directory on PATH; only
+/// the first line says anything the reader needs.
+fn first_line(message: &str) -> String {
+    message.lines().next().unwrap_or(message).to_owned()
 }
 
 impl App {
@@ -42,7 +59,7 @@ impl App {
         let mut registry = Registry::new();
         registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
 
-        Ok(Self { registry, spec, harness, server, started: Instant::now(), stage, leader_armed: false, should_quit: false })
+        Ok(Self { registry, harness, server, started: Instant::now(), stage, picker: None, last_git: Instant::now(), leader_armed: false, should_quit: false })
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -54,6 +71,10 @@ impl App {
                 self.registry.apply(&report);
             }
             self.registry.refresh();
+            if self.last_git.elapsed() >= GIT_INTERVAL {
+                self.registry.refresh_git();
+                self.last_git = Instant::now();
+            }
 
             terminal.draw(|frame| self.draw(frame))?;
 
@@ -78,9 +99,16 @@ impl App {
         if let Some(agent) = self.registry.focused() {
             draw::stage::draw(frame, stage, agent.session());
         }
+        if let Some(picker) = &self.picker {
+            draw::modals::new_agent::draw(frame, frame.area(), picker);
+        }
     }
 
     fn on_key(&mut self, key: KeyEvent) -> io::Result<()> {
+        if self.picker.is_some() {
+            return self.on_picker_key(key);
+        }
+
         if self.leader_armed {
             self.leader_armed = false;
             return self.on_leader_chord(key);
@@ -102,7 +130,7 @@ impl App {
 
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Char('n') => self.hold_another()?,
+            KeyCode::Char('n') => self.open_picker(),
             KeyCode::Char('x') => self.dismiss(),
             KeyCode::Char('j') | KeyCode::Down => self.registry.focus_next(),
             KeyCode::Char('k') | KeyCode::Up => self.registry.focus_prev(),
@@ -115,9 +143,51 @@ impl App {
         Ok(())
     }
 
-    fn hold_another(&mut self) -> io::Result<()> {
-        let agent = Agent::spawn(&self.spec, &self.harness, self.stage.height, self.stage.width)?;
-        self.registry.push(agent);
+    fn open_picker(&mut self) {
+        self.picker = Some(Picker::new(projects::discover(&projects::default_root())));
+    }
+
+    /// While the modal is up it owns every key: nothing reaches the agent, so a
+    /// stray keystroke cannot land in a conversation you cannot see.
+    fn on_picker_key(&mut self, key: KeyEvent) -> io::Result<()> {
+        let Some(picker) = &mut self.picker else {
+            return Ok(());
+        };
+        match key.code {
+            KeyCode::Esc => self.picker = None,
+            KeyCode::Enter => return self.hold_picked(),
+            KeyCode::Tab => picker.cycle_kind(),
+            KeyCode::Down => picker.move_down(),
+            KeyCode::Up => picker.move_up(),
+            KeyCode::Backspace => picker.backspace(),
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => picker.push(c),
+            _ => {},
+        }
+        Ok(())
+    }
+
+    /// A CLI that is not installed is a message, not the end of atrium, so the
+    /// failure stays inside the modal instead of propagating out of the loop.
+    fn hold_picked(&mut self) -> io::Result<()> {
+        let Some(picker) = &self.picker else {
+            return Ok(());
+        };
+        let Some(project) = picker.selected_project() else {
+            return Ok(());
+        };
+
+        let spec = AgentSpec::new(picker.kind(), Vec::new(), project.path.clone());
+        match Agent::spawn(&spec, &self.harness, self.stage.height, self.stage.width) {
+            Ok(agent) => {
+                self.registry.push(agent);
+                self.picker = None;
+            },
+            Err(error) => {
+                if let Some(picker) = &mut self.picker {
+                    picker.set_error(first_line(&error.to_string()));
+                }
+            },
+        }
         Ok(())
     }
 

@@ -8,7 +8,10 @@ use portable_pty::CommandBuilder;
 
 use crate::{
     adapters::{self, StatusSource, Wiring},
-    core::pty::PtySession,
+    core::{
+        git::{self, GitContext},
+        pty::PtySession,
+    },
 };
 
 /// Agent ids only have to be unique within one atrium, which a counter gives.
@@ -101,6 +104,7 @@ pub struct Agent {
     pub cwd: PathBuf,
     pub status: Status,
     source: StatusSource,
+    git: Option<GitContext>,
     session: PtySession,
 }
 
@@ -113,7 +117,18 @@ impl Agent {
         kind.instrument(&mut cmd, &Wiring { exe: harness.exe.clone(), socket: harness.socket.clone(), agent_id: id });
 
         let session = PtySession::spawn(cmd, rows, cols)?;
-        Ok(Self { id, name: spec.name(), cwd: spec.cwd.clone(), status: Status::Idle, source: kind.status_source(), session })
+        let git = git::context_for(&spec.cwd);
+        Ok(Self { id, name: spec.name(), cwd: spec.cwd.clone(), status: Status::Idle, source: kind.status_source(), git, session })
+    }
+
+    pub fn git(&self) -> Option<&GitContext> {
+        self.git.as_ref()
+    }
+
+    /// Re-read the branch and whether the tree is dirty. Called on a timer, not
+    /// every frame: status on a large repo is far too slow for the draw loop.
+    pub fn refresh_git(&mut self) {
+        self.git = git::context_for(&self.cwd);
     }
 
     /// Whether this agent can say what it is doing, or only whether it is alive.

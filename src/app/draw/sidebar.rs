@@ -20,7 +20,13 @@ pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry, spinner: char) {
             let style = if agent.has_exited() { Style::default().add_modifier(Modifier::DIM) } else { Style::default() };
             // A working agent spins where the others show a steady glyph.
             let mark = if agent.status == Status::Working { spinner.to_string() } else { agent.status.glyph().to_owned() };
-            ListItem::new(Line::from(vec![Span::raw(format!(" {mark} ")), Span::raw(key), Span::raw(agent.name.clone())])).style(style)
+            let mut lines = vec![Line::from(vec![Span::raw(format!(" {mark} ")), Span::raw(key), Span::raw(agent.name.clone())])];
+            if let Some(git) = agent.git() {
+                // An asterisk is the whole dirty/clean signal; a count would not fit.
+                let dirty = if git.dirty { " *" } else { "" };
+                lines.push(Line::from(Span::styled(format!("     {}{}", git.branch, dirty), Style::default().add_modifier(Modifier::DIM))));
+            }
+            ListItem::new(lines).style(style)
         })
         .collect();
 

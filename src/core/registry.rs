@@ -90,6 +90,12 @@ impl Registry {
         }
     }
 
+    pub fn refresh_git(&mut self) {
+        for agent in &mut self.agents {
+            agent.refresh_git();
+        }
+    }
+
     pub fn refresh(&mut self) {
         for agent in &mut self.agents {
             agent.refresh_status();

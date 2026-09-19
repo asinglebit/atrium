@@ -2,6 +2,8 @@ pub mod adapters;
 pub mod app;
 pub mod core {
     pub mod agent;
+    pub mod git;
+    pub mod projects;
     pub mod pty;
     pub mod registry;
 }
