@@ -66,15 +66,17 @@ name = "one dark warmer"   # any of guitar's ~30 preset names
 [keys]
 quit = "ctrl+q"            # any key or chord: "esc", "ctrl+y", "alt+enter"
 goto = "ctrl+g"
+settings = "ctrl+s"
+sidebar = "ctrl+o"
 new = "ctrl+t"
 dismiss = "ctrl+]"
 next = "ctrl+n"
 previous = "ctrl+p"
 ```
 
-Individual colours are **not** set here: they live in `theme.json`, shared with
-guitar, so the two stay in step. With no config at all atrium uses whatever
-theme guitar is set to.
+Themes are easier picked than typed: `ctrl+s` opens settings, where the themes
+tab lists all thirty and Enter applies one. Individual colours are **not** set
+in `config.toml`: they live in `theme.json`.
 
 `--check-config` names anything it could not use rather than failing silently.
 Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
@@ -179,11 +181,13 @@ enough to be free and fast enough that the `*` appears while you still care.
 **Unix only, deliberately.** The status channel is a unix socket. Windows would
 need a different transport, and nothing here needs it yet.
 
-**The palette is guitar's, copied verbatim, and the theme file is shared.**
-`src/helpers/palette.rs` is guitar's file with one function changed:
-`theme_path()` reads atrium's own `theme.json` if there is one and **guitar's
-otherwise**. So retheme guitar and atrium follows, with nothing to configure —
-which is the point. Statuses map onto that palette (`COLOR_RED`, `COLOR_AMBER`,
+**The palette is guitar's, copied verbatim, and the theme file is read from
+guitar but never written to it.** `src/helpers/palette.rs` is guitar's file with
+two functions changed. `theme_path()` reads atrium's own `theme.json` if there
+is one and **guitar's otherwise**, so retheme guitar and atrium follows with
+nothing to configure. `save_theme()` always writes atrium's own path — picking a
+theme in atrium's settings must not retheme guitar behind its back, which is
+exactly what the unmodified function would have done. Statuses map onto that palette (`COLOR_RED`, `COLOR_AMBER`,
 `COLOR_GREEN`) rather than carrying colours of their own, so the two tools can
 never disagree about what red is.
 
@@ -194,6 +198,12 @@ from the next — the frame already supplies the rest — so the line between th
 sidebar and the stage is single rather than doubled. Rows are zebra-striped with
 `zebra_list_items`, lifted from guitar's `pane_window.rs`: selected row in
 `COLOR_GREY_800`, every other row in `COLOR_GREY_900`.
+
+**The line between the panes is the scrollbar.** guitar's scrollbar uses the
+border glyph as its track and `▌` as the thumb, so one column is both the
+separator and the scroll position. ratatui draws *nothing* for a scrollbar whose
+content length is zero, though, so a list that fits would lose the separator
+entirely — `draw_gutter` falls back to a plain bordered block in that case.
 
 **`ctrl+1`..`ctrl+9` is not a thing, which is why there is a goto list.** A
 terminal has no legacy encoding for ctrl and a digit: `ctrl+1` arrives as a bare

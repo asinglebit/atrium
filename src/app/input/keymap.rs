@@ -74,7 +74,9 @@ fn key_name(code: KeyCode) -> String {
 /// - `ctrl+n` / `ctrl+p` walk shell history; Claude's own box uses the arrows.
 /// - `ctrl+g` aborts a readline entry, which is rarely asked for on purpose.
 /// - `ctrl+]` is the telnet escape, which nothing in a TUI wants.
-/// - `ctrl+q` is XON, and raw mode has already turned flow control off.
+/// - `ctrl+q` and `ctrl+s` are XON and XOFF, and raw mode has already turned
+///   flow control off, so neither can freeze anything.
+/// - `ctrl+o` is readline's operate-and-get-next, which nothing asks for.
 ///
 /// Deliberately untouched: `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+x`,
 /// `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`, `ctrl+k` and
@@ -83,6 +85,8 @@ fn key_name(code: KeyCode) -> String {
 pub struct Keymap {
     pub quit: Chord,
     pub goto: Chord,
+    pub settings: Chord,
+    pub sidebar: Chord,
     pub new: Chord,
     pub dismiss: Chord,
     pub next: Chord,
@@ -95,7 +99,7 @@ fn ctrl(c: char) -> Chord {
 
 impl Default for Keymap {
     fn default() -> Self {
-        Self { quit: ctrl('q'), goto: ctrl('g'), new: ctrl('t'), dismiss: ctrl(']'), next: ctrl('n'), previous: ctrl('p') }
+        Self { quit: ctrl('q'), goto: ctrl('g'), settings: ctrl('s'), sidebar: ctrl('o'), new: ctrl('t'), dismiss: ctrl(']'), next: ctrl('n'), previous: ctrl('p') }
     }
 }
 
@@ -105,6 +109,8 @@ impl Keymap {
         match action {
             "quit" => self.quit = chord,
             "goto" => self.goto = chord,
+            "settings" => self.settings = chord,
+            "sidebar" => self.sidebar = chord,
             "new" => self.new = chord,
             "dismiss" => self.dismiss = chord,
             "next" => self.next = chord,
@@ -114,9 +120,23 @@ impl Keymap {
         true
     }
 
+    /// Every action with the name the config file uses, for the settings list.
+    pub fn actions(&self) -> [(&'static str, Chord); 8] {
+        [
+            ("new", self.new),
+            ("goto", self.goto),
+            ("next", self.next),
+            ("previous", self.previous),
+            ("dismiss", self.dismiss),
+            ("sidebar", self.sidebar),
+            ("settings", self.settings),
+            ("quit", self.quit),
+        ]
+    }
+
     /// Every chord atrium claims, so the agent can be told what it will not see.
-    pub fn claimed(&self) -> [Chord; 6] {
-        [self.quit, self.goto, self.new, self.dismiss, self.next, self.previous]
+    pub fn claimed(&self) -> [Chord; 8] {
+        [self.quit, self.goto, self.settings, self.sidebar, self.new, self.dismiss, self.next, self.previous]
     }
 }
 

@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 /// xterm's modifier parameter: 1, plus shift 1, alt 2, ctrl 4.
 fn modifier_param(mods: KeyModifiers) -> u8 {
@@ -106,6 +106,45 @@ pub fn encode(key: KeyEvent) -> Option<Vec<u8>> {
     };
 
     if bytes.is_empty() { None } else { Some(bytes) }
+}
+
+/// The bits a mouse report adds for the modifiers held with it.
+fn mouse_modifier_bits(mods: KeyModifiers) -> u8 {
+    4 * u8::from(mods.contains(KeyModifiers::SHIFT)) + 8 * u8::from(mods.contains(KeyModifiers::ALT)) + 16 * u8::from(mods.contains(KeyModifiers::CONTROL))
+}
+
+fn button_code(button: MouseButton) -> u8 {
+    match button {
+        MouseButton::Left => 0,
+        MouseButton::Middle => 1,
+        MouseButton::Right => 2,
+    }
+}
+
+/// An SGR mouse report, which is what a terminal sends an application that has
+/// asked for the mouse: `ESC [ < button ; col ; row` then `M` to press or `m`
+/// to release.
+///
+/// `origin` is the top-left of the area the agent occupies, because the agent
+/// believes it starts at 1,1 and knows nothing about the sidebar beside it.
+pub fn encode_mouse(event: &MouseEvent, origin: (u16, u16)) -> Option<Vec<u8>> {
+    let column = event.column.checked_sub(origin.0)? + 1;
+    let row = event.row.checked_sub(origin.1)? + 1;
+
+    let (button, pressed) = match event.kind {
+        MouseEventKind::Down(button) => (button_code(button), true),
+        MouseEventKind::Up(button) => (button_code(button), false),
+        // 32 is the "motion" bit; a drag is a press that is still moving.
+        MouseEventKind::Drag(button) => (button_code(button) + 32, true),
+        MouseEventKind::Moved => (35, true),
+        MouseEventKind::ScrollUp => (64, true),
+        MouseEventKind::ScrollDown => (65, true),
+        MouseEventKind::ScrollLeft => (66, true),
+        MouseEventKind::ScrollRight => (67, true),
+    };
+
+    let button = button + mouse_modifier_bits(event.modifiers);
+    Some(format!("\x1b[<{button};{column};{row}{}", if pressed { 'M' } else { 'm' }).into_bytes())
 }
 
 /// Wraps pasted text so the agent can tell it apart from typing.

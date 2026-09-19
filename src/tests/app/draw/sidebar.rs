@@ -3,7 +3,7 @@ use crate::{
     core::agent::{Agent, AgentSpec, Harness},
     helpers::palette::Theme,
 };
-use ratatui::{Terminal, backend::TestBackend};
+use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 
 fn harness() -> Harness {
     Harness { exe: "atrium".into(), socket: "/nonexistent/atrium.sock".into() }
@@ -20,7 +20,7 @@ fn registry_of(dirs: &[&str]) -> Registry {
 
 fn rendered(registry: &Registry) -> String {
     let mut terminal = Terminal::new(TestBackend::new(26, 6)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), registry, &Theme::classic(), '.')).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), registry, &Theme::classic(), '.', 0)).expect("draw");
     terminal.backend().buffer().content().chunks(26).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -86,11 +86,33 @@ fn branches_share_one_right_aligned_column() {
     }
 
     let mut terminal = Terminal::new(TestBackend::new(40, 5)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), &registry, &Theme::classic(), '.')).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), &registry, &Theme::classic(), '.', 0)).expect("draw");
     let rows: Vec<String> = terminal.backend().buffer().content().chunks(40).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect();
 
     // Rows 1 and 2 are the two agents; their branches must end at the same column.
     let end_of = |row: &String| row.trim_end().chars().count();
     assert_eq!(end_of(&rows[1]), end_of(&rows[2]), "branches are ragged:\n{}\n{}", rows[1], rows[2]);
     assert!(rows[1].contains("main"), "{}", rows[1]);
+}
+
+#[test]
+fn a_click_lands_on_the_row_under_it() {
+    let area = Rect::new(0, 4, 26, 10);
+    // Row 4 is the title, so the first agent is on row 5.
+    assert_eq!(row_at(area, 0, 4), None, "the title line is not an agent");
+    assert_eq!(row_at(area, 0, 5), Some(0));
+    assert_eq!(row_at(area, 0, 7), Some(2));
+}
+
+#[test]
+fn a_click_accounts_for_how_far_the_list_is_scrolled() {
+    let area = Rect::new(0, 4, 26, 10);
+    assert_eq!(row_at(area, 3, 5), Some(3), "the top row is row 3 once scrolled by three");
+}
+
+#[test]
+fn a_click_below_the_pane_lands_nowhere() {
+    let area = Rect::new(0, 4, 26, 10);
+    assert_eq!(row_at(area, 0, 14), None);
+    assert_eq!(row_at(area, 0, 99), None);
 }

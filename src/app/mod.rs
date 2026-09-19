@@ -7,6 +7,7 @@ pub mod draw {
         pub mod new_agent;
     }
     pub mod pane;
+    pub mod settings;
     pub mod sidebar;
     pub mod stage;
     pub mod statusbar;
@@ -22,4 +23,5 @@ pub mod state {
     pub mod goto;
     pub mod layout;
     pub mod picker;
+    pub mod settings;
 }

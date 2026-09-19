@@ -2,7 +2,7 @@ use std::io;
 
 use atrium::{AgentSpec, App, Config, VERSION, core::projects, helpers::palette, ipc::hook};
 use crossterm::{
-    event::{DisableBracketedPaste, EnableBracketedPaste},
+    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
     execute,
 };
 
@@ -27,7 +27,12 @@ OPTIONS
 KEYS
     Actions fire directly; every other key reaches the focused agent.
     ctrl+t  hold a new agent     ctrl+n / ctrl+p  next / previous
-    ctrl+]  dismiss this one     ctrl+q           quit
+    ctrl+g  go to (1-9 jumps)    ctrl+o           show / hide the sidebar
+    ctrl+]  dismiss this one     ctrl+s           settings
+    ctrl+q  quit
+
+    The mouse works: click a row, wheel to scroll. Inside the agent it is
+    forwarded on, so the agent's own mouse support keeps working.
 
     Untouched, so the agent keeps them: ctrl+c, ctrl+d, ctrl+z, ctrl+v,
     ctrl+x, ctrl+l, ctrl+r, ctrl+u, ctrl+w, ctrl+a, ctrl+e, ctrl+k, esc.
@@ -81,11 +86,11 @@ fn run_tui(spec: AgentSpec, config: Config) -> io::Result<()> {
     let mut terminal = ratatui::init();
     // ratatui does not turn this on, and without it a paste arrives as a burst
     // of individual keystrokes.
-    execute!(io::stdout(), EnableBracketedPaste)?;
+    execute!(io::stdout(), EnableBracketedPaste, EnableMouseCapture)?;
 
     let result = terminal.size().and_then(|size| App::new(spec, config, size.height, size.width)).and_then(|mut app| app.run(&mut terminal));
 
-    execute!(io::stdout(), DisableBracketedPaste)?;
+    execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste)?;
     ratatui::restore();
     result
 }

@@ -91,3 +91,61 @@ fn unknown_keys_are_dropped_rather_than_guessed() {
 fn paste_is_bracketed() {
     assert_eq!(encode_paste("hi"), b"\x1b[200~hi\x1b[201~");
 }
+
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+
+fn mouse(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
+    MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE }
+}
+
+#[test]
+fn a_click_becomes_an_sgr_report() {
+    let event = mouse(MouseEventKind::Down(MouseButton::Left), 0, 0);
+    assert_eq!(encode_mouse(&event, (0, 0)).expect("encodes"), b"\x1b[<0;1;1M");
+}
+
+#[test]
+fn a_release_ends_in_a_lowercase_m() {
+    let event = mouse(MouseEventKind::Up(MouseButton::Left), 0, 0);
+    assert_eq!(encode_mouse(&event, (0, 0)).expect("encodes"), b"\x1b[<0;1;1m");
+}
+
+#[test]
+fn coordinates_are_relative_to_the_agents_own_corner() {
+    // The agent starts at column 28: a click there is its column 1, not 29.
+    let event = mouse(MouseEventKind::Down(MouseButton::Left), 30, 5);
+    assert_eq!(encode_mouse(&event, (28, 3)).expect("encodes"), b"\x1b[<0;3;3M");
+}
+
+#[test]
+fn a_click_outside_the_agent_does_not_encode() {
+    let event = mouse(MouseEventKind::Down(MouseButton::Left), 2, 5);
+    assert!(encode_mouse(&event, (28, 3)).is_none(), "a click left of the stage is not the agent's");
+}
+
+#[test]
+fn the_buttons_are_numbered_the_way_terminals_number_them() {
+    for (button, code) in [(MouseButton::Left, 0), (MouseButton::Middle, 1), (MouseButton::Right, 2)] {
+        let event = mouse(MouseEventKind::Down(button), 0, 0);
+        assert_eq!(encode_mouse(&event, (0, 0)).expect("encodes"), format!("\x1b[<{code};1;1M").into_bytes());
+    }
+}
+
+#[test]
+fn the_wheel_reports_its_own_codes() {
+    assert_eq!(encode_mouse(&mouse(MouseEventKind::ScrollUp, 0, 0), (0, 0)).expect("encodes"), b"\x1b[<64;1;1M");
+    assert_eq!(encode_mouse(&mouse(MouseEventKind::ScrollDown, 0, 0), (0, 0)).expect("encodes"), b"\x1b[<65;1;1M");
+}
+
+#[test]
+fn a_drag_sets_the_motion_bit() {
+    let event = mouse(MouseEventKind::Drag(MouseButton::Left), 0, 0);
+    assert_eq!(encode_mouse(&event, (0, 0)).expect("encodes"), b"\x1b[<32;1;1M");
+}
+
+#[test]
+fn modifiers_ride_along_with_the_button() {
+    let mut event = mouse(MouseEventKind::Down(MouseButton::Left), 0, 0);
+    event.modifiers = KeyModifiers::CONTROL;
+    assert_eq!(encode_mouse(&event, (0, 0)).expect("encodes"), b"\x1b[<16;1;1M");
+}

@@ -2573,8 +2573,10 @@ pub fn load_theme() -> Theme {
     load_theme_from_path(&theme_path())
 }
 
+/// Always atrium's own file, never the one it may be *reading* from guitar --
+/// picking a theme here must not retheme guitar behind its back.
 pub fn save_theme(theme: &Theme) {
-    save_theme_to_path(&theme_path(), theme);
+    save_theme_to_path(&config_path_for("atrium"), theme);
 }
 
 #[cfg(test)]

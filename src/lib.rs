@@ -11,6 +11,7 @@ pub mod core {
 pub mod helpers {
     pub mod json;
     pub mod palette;
+    pub mod scroll;
     pub mod spinner;
     pub mod text;
     pub mod version;

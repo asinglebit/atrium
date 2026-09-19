@@ -9,6 +9,7 @@ pub const MIN_STAGE_WIDTH: u16 = 40;
 
 /// Where everything goes. Same shape as guitar's: a title line, a bordered
 /// frame holding the panes, and a status line under it.
+#[derive(Clone, Copy, Debug)]
 pub struct Layout {
     pub title_left: Rect,
     pub title_right: Rect,
@@ -28,7 +29,7 @@ fn halves(row: Rect) -> (Rect, Rect) {
     (Rect { width: left, ..row }, Rect { x: row.x + left, width: row.width - left, ..row })
 }
 
-pub fn compute(full: Rect) -> Layout {
+pub fn compute(full: Rect, want_sidebar: bool) -> Layout {
     // A title line above and a status line below, the frame taking the rest.
     let title = Rect { height: 1.min(full.height), ..full };
     let status_height = if full.height >= 3 { 1 } else { 0 };
@@ -38,7 +39,7 @@ pub fn compute(full: Rect) -> Layout {
     // The frame's own border is not floor space.
     let inner = Rect { x: app.x + 1, y: app.y + 1, width: app.width.saturating_sub(2), height: app.height.saturating_sub(2) };
 
-    let (sidebar, stage) = if inner.width < SIDEBAR_WIDTH + MIN_STAGE_WIDTH {
+    let (sidebar, stage) = if !want_sidebar || inner.width < SIDEBAR_WIDTH + MIN_STAGE_WIDTH {
         (None, inner)
     } else {
         let sidebar = Rect { width: SIDEBAR_WIDTH, ..inner };

@@ -3,14 +3,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{DefaultTerminal, Frame, layout::Rect, widgets::Block};
 
 use crate::{
     app::{
         draw,
         input::{keymap::Keymap, keys},
-        state::{goto::Goto, layout, picker::Picker},
+        state::{goto::Goto, layout, layout::Layout, picker::Picker, settings::Settings},
     },
     core::{
         agent::{Agent, AgentSpec, Harness},
@@ -18,7 +18,7 @@ use crate::{
         projects,
         registry::Registry,
     },
-    helpers::{palette::Theme, spinner},
+    helpers::{palette, palette::Theme, scroll, spinner},
     ipc::server::StatusServer,
 };
 
@@ -36,6 +36,12 @@ pub struct App {
     stage: Rect,
     /// Some while a modal is up; input goes to it instead of the agent.
     modal: Option<Modal>,
+    /// Some while the settings view has replaced the panes.
+    settings: Option<Settings>,
+    sidebar_visible: bool,
+    sidebar_scroll: usize,
+    /// The last layout drawn, which is what a click is measured against.
+    layout: Layout,
     last_git: Instant,
     should_quit: bool,
 }
@@ -54,6 +60,11 @@ enum Jump {
     Stay,
 }
 
+/// Whether a point falls inside a rectangle.
+fn within(area: Rect, (column, row): (u16, u16)) -> bool {
+    column >= area.x && column < area.x + area.width && row >= area.y && row < area.y + area.height
+}
+
 /// Spawn failures arrive as a paragraph naming every directory on PATH; only
 /// the first line says anything the reader needs.
 fn first_line(message: &str) -> String {
@@ -66,16 +77,31 @@ impl App {
         // Agents call back into this same binary, so its path is the one to hand out.
         let harness = Harness { exe: std::env::current_exe()?, socket: server.path().to_path_buf() };
 
-        let stage = layout::compute(Rect::new(0, 0, cols, rows)).stage;
+        let stage = layout::compute(Rect::new(0, 0, cols, rows), true).stage;
         let mut registry = Registry::new();
         registry.push(Agent::spawn(&spec, &harness, stage.height, stage.width)?);
 
-        Ok(Self { registry, theme: config.theme, keymap: config.keymap, harness, server, started: Instant::now(), stage, modal: None, last_git: Instant::now(), should_quit: false })
+        Ok(Self {
+            registry,
+            theme: config.theme,
+            keymap: config.keymap,
+            harness,
+            server,
+            started: Instant::now(),
+            stage,
+            modal: None,
+            settings: None,
+            sidebar_visible: true,
+            sidebar_scroll: 0,
+            layout: layout::compute(Rect::new(0, 0, cols, rows), true),
+            last_git: Instant::now(),
+            should_quit: false,
+        })
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.should_quit {
-            let stage = layout::compute(Rect::from(terminal.size()?)).stage;
+            let stage = layout::compute(Rect::from(terminal.size()?), self.sidebar_visible && self.settings.is_none()).stage;
             self.stage = stage;
             self.registry.resize_all(stage.height, stage.width)?;
             for report in self.server.drain() {
@@ -94,6 +120,7 @@ impl App {
                     // Release arrives on terminals with the kitty protocol; without
                     // this filter every keystroke is sent twice.
                     Event::Key(key) if key.kind != KeyEventKind::Release => self.on_key(key)?,
+                    Event::Mouse(mouse) => self.on_mouse(mouse)?,
                     Event::Paste(text) => self.send_bytes(&keys::encode_paste(&text))?,
                     _ => {},
                 }
@@ -103,7 +130,8 @@ impl App {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
-        let layout = layout::compute(frame.area());
+        let layout = layout::compute(frame.area(), self.sidebar_visible && self.settings.is_none());
+        self.layout = layout;
         let spinner = spinner::frame_at(self.started.elapsed());
 
         // The agent paints its own cells; this is what colours everything it
@@ -114,11 +142,22 @@ impl App {
         let cwd = self.registry.focused().map_or_else(String::new, |agent| agent.cwd().display().to_string());
         draw::title::draw(frame, &layout, &self.theme, &cwd, self.view_name());
 
-        if let Some(area) = layout.sidebar {
-            draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner);
-        }
-        if let Some(agent) = self.registry.focused() {
-            draw::stage::draw(frame, layout.stage, agent.session());
+        if self.settings.is_some() {
+            let visible = layout.stage.height.saturating_sub(draw::settings::HEADER_HEIGHT) as usize;
+            if let Some(settings) = &mut self.settings {
+                settings.scroll = scroll::trap(settings.selected(), settings.scroll, settings.len(), visible);
+            }
+            if let Some(settings) = &self.settings {
+                draw::settings::draw(frame, layout.stage, settings, &self.keymap, &self.theme);
+            }
+        } else {
+            if let Some(area) = layout.sidebar {
+                self.sidebar_scroll = scroll::trap(self.registry.focus(), self.sidebar_scroll, self.registry.len(), area.height.saturating_sub(1) as usize);
+                draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, self.sidebar_scroll);
+            }
+            if let Some(agent) = self.registry.focused() {
+                draw::stage::draw(frame, layout.stage, agent.session());
+            }
         }
         draw::statusbar::draw(frame, &layout, &self.registry, &self.theme);
 
@@ -134,11 +173,16 @@ impl App {
         match self.modal {
             Some(Modal::NewAgent(_)) => "new agent",
             Some(Modal::Goto(_)) => "go to",
+            None if self.settings.is_some() => "settings",
             None => "agents",
         }
     }
 
     fn on_key(&mut self, key: KeyEvent) -> io::Result<()> {
+        if self.settings.is_some() {
+            self.on_settings_key(key);
+            return Ok(());
+        }
         match self.modal {
             Some(Modal::NewAgent(_)) => return self.on_picker_key(key),
             Some(Modal::Goto(_)) => {
@@ -163,6 +207,10 @@ impl App {
             self.open_picker();
         } else if keymap.dismiss.matches(key) {
             self.dismiss();
+        } else if keymap.settings.matches(key) {
+            self.settings = Some(Settings::new(&self.theme));
+        } else if keymap.sidebar.matches(key) {
+            self.sidebar_visible = !self.sidebar_visible;
         } else if keymap.goto.matches(key) {
             self.modal = Some(Modal::Goto(Goto::new(self.registry.len(), self.registry.focus())));
         } else if keymap.next.matches(key) {
@@ -173,6 +221,106 @@ impl App {
             return false;
         }
         true
+    }
+
+    /// Clicks and the wheel go wherever they landed. Anything inside the stage
+    /// is re-encoded and handed to the agent, which asked the terminal for the
+    /// mouse itself and has no idea there is a sidebar beside it.
+    fn on_mouse(&mut self, mouse: MouseEvent) -> io::Result<()> {
+        let layout = self.layout;
+        let at = (mouse.column, mouse.row);
+
+        if self.settings.is_some() {
+            self.on_settings_mouse(mouse, layout.stage);
+            return Ok(());
+        }
+        if self.modal.is_some() {
+            self.on_modal_mouse(mouse);
+            return Ok(());
+        }
+        if let Some(sidebar) = layout.sidebar
+            && within(sidebar, at)
+        {
+            self.on_sidebar_mouse(mouse, sidebar);
+            return Ok(());
+        }
+        if within(layout.stage, at)
+            && let Some(bytes) = keys::encode_mouse(&mouse, (layout.stage.x, layout.stage.y))
+        {
+            return self.send_bytes(&bytes);
+        }
+        Ok(())
+    }
+
+    fn on_sidebar_mouse(&mut self, mouse: MouseEvent, area: Rect) {
+        match mouse.kind {
+            MouseEventKind::ScrollDown => self.sidebar_scroll = self.sidebar_scroll.saturating_add(1),
+            MouseEventKind::ScrollUp => self.sidebar_scroll = self.sidebar_scroll.saturating_sub(1),
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some(index) = draw::sidebar::row_at(area, self.sidebar_scroll, mouse.row) {
+                    self.registry.focus_at(index);
+                }
+            },
+            _ => {},
+        }
+    }
+
+    fn on_settings_mouse(&mut self, mouse: MouseEvent, area: Rect) {
+        let Some(settings) = &mut self.settings else {
+            return;
+        };
+        match mouse.kind {
+            MouseEventKind::ScrollDown => settings.move_down(),
+            MouseEventKind::ScrollUp => settings.move_up(),
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some(tab) = draw::settings::tab_at(area, mouse.column, mouse.row) {
+                    settings.open(tab);
+                } else if let Some(index) = draw::settings::row_at(area, settings.scroll, mouse.row) {
+                    settings.select(index);
+                }
+            },
+            _ => {},
+        }
+    }
+
+    /// Modals are small and centred; the wheel moves the cursor rather than
+    /// asking each one to hit-test its own geometry.
+    fn on_modal_mouse(&mut self, mouse: MouseEvent) {
+        let down = match mouse.kind {
+            MouseEventKind::ScrollDown => true,
+            MouseEventKind::ScrollUp => false,
+            _ => return,
+        };
+        match &mut self.modal {
+            Some(Modal::NewAgent(picker)) if down => picker.move_down(),
+            Some(Modal::NewAgent(picker)) => picker.move_up(),
+            Some(Modal::Goto(goto)) if down => goto.move_down(),
+            Some(Modal::Goto(goto)) => goto.move_up(),
+            None => {},
+        }
+    }
+
+    /// The settings view owns the keyboard while it is open, the same way a
+    /// modal does -- nothing reaches the agent behind it.
+    fn on_settings_key(&mut self, key: KeyEvent) {
+        let Some(settings) = &mut self.settings else {
+            return;
+        };
+        match key.code {
+            KeyCode::Esc => self.settings = None,
+            KeyCode::Tab | KeyCode::Right => settings.next_tab(),
+            KeyCode::BackTab | KeyCode::Left => settings.previous_tab(),
+            KeyCode::Char('j') | KeyCode::Down => settings.move_down(),
+            KeyCode::Char('k') | KeyCode::Up => settings.move_up(),
+            KeyCode::Enter => {
+                if let Some(theme) = settings.theme_under_cursor() {
+                    self.theme = theme;
+                    // Written to atrium's own theme.json, never guitar's.
+                    palette::save_theme(&theme);
+                }
+            },
+            _ => {},
+        }
     }
 
     fn open_picker(&mut self) {
