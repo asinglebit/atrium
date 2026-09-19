@@ -1,8 +1,21 @@
 # atrium
 
+> **Very much a work in progress.** It is being built as it is used, so the
+> shape still moves week to week. Bindings, config files and layout are all
+> fair game to change, and nothing here is stable yet.
+
 A terminal UI that **holds coding agents**. Start it in any terminal; it spawns
 agent CLIs as its own children and keeps them in a sidebar, showing what each
 one is doing. Switch between them inside atrium.
+
+Same family as [guitar](https://github.com/asinglebit/guitar) — the same chrome,
+the same palette, the same `theme.json` — pointed at a different job. guitar is
+for reading a repository; atrium is for running the agents that change one. Both
+are written for one person's day-to-day work first, and that is the whole design
+brief here: a day spent driving several coding agents at once, wanting to see at
+a glance which one is working, which one is waiting on you, and what repository
+each is standing in. The defaults are opinionated because they are one person's
+defaults, and the scope stops where that day's work stops.
 
 It is not a multiplexer and it is not tmux-aware. Run it inside tmux, inside
 ssh, on a bare TTY — atrium neither knows nor cares. Run a second one in another
@@ -23,6 +36,10 @@ pane and it holds its own, independent set.
 
 Title line, rounded frame, bordered panes, status line — guitar's chrome, off
 the same `theme.json`. Retheme one and the other follows.
+
+`docs/` is an Obsidian vault covering all of this in more detail. Open the
+folder as a vault, or start at [docs/Atrium.md](docs/Atrium.md) and read it as
+plain markdown.
 
 ## Install
 

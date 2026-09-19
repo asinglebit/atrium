@@ -1,1 +1,5 @@
 /target
+
+# Obsidian rewrites these on every open; the vault's settings are tracked.
+docs/.obsidian/workspace*.json
+docs/.obsidian/cache
