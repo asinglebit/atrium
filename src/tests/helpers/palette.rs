@@ -54,3 +54,52 @@ fn distinct_statuses_are_told_apart_by_colour() {
         assert!(!colours[index + 1..].contains(colour), "two statuses share {colour:?}");
     }
 }
+
+#[test]
+fn a_cell_with_no_background_of_its_own_takes_the_themes() {
+    let theme = Theme::classic();
+    let area = Rect::new(0, 0, 3, 2);
+    let mut buffer = Buffer::empty(area);
+
+    theme.fill_default_background(area, &mut buffer);
+
+    for x in 0..3 {
+        for y in 0..2 {
+            assert_eq!(buffer[(x, y)].bg, theme.background_color(), "cell ({x}, {y}) kept the terminal's background");
+        }
+    }
+}
+
+#[test]
+fn a_background_the_agent_set_on_purpose_survives() {
+    let theme = Theme::classic();
+    let area = Rect::new(0, 0, 2, 1);
+    let mut buffer = Buffer::empty(area);
+    buffer[(0, 0)].set_bg(Color::Rgb(1, 2, 3));
+
+    theme.fill_default_background(area, &mut buffer);
+
+    assert_eq!(buffer[(0, 0)].bg, Color::Rgb(1, 2, 3), "an explicit colour is not the terminal's default");
+    assert_eq!(buffer[(1, 0)].bg, theme.background_color());
+}
+
+#[test]
+fn filling_past_the_buffer_is_clipped_rather_than_a_panic() {
+    let theme = Theme::classic();
+    let mut buffer = Buffer::empty(Rect::new(0, 0, 2, 2));
+
+    theme.fill_default_background(Rect::new(0, 0, 100, 100), &mut buffer);
+
+    assert_eq!(buffer[(1, 1)].bg, theme.background_color());
+}
+
+#[test]
+fn foregrounds_are_left_to_the_agent() {
+    let theme = Theme::classic();
+    let area = Rect::new(0, 0, 1, 1);
+    let mut buffer = Buffer::empty(area);
+
+    theme.fill_default_background(area, &mut buffer);
+
+    assert_eq!(buffer[(0, 0)].fg, Color::Reset, "only the background is the theme's to set");
+}

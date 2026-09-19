@@ -1,7 +1,4 @@
-use crate::core::projects::Project;
-
-/// The agent CLIs the picker can launch, in the order Tab cycles them.
-pub const KINDS: [&str; 3] = ["claude", "opencode", "codex"];
+use crate::core::{profile::Profile, projects::Project};
 
 /// How well `needle` fits `haystack`, lower being better: how far apart the
 /// matched characters are, then how late the match starts, then the name's
@@ -28,19 +25,25 @@ fn score(needle: &str, haystack: &str) -> Option<(usize, usize, usize)> {
     Some((last - first, first, hay.len()))
 }
 
-/// Choosing what to hold next: which project, and which CLI to hold there.
+/// Choosing what to hold next: which project, and which profile to hold it
+/// under. The profile is the CLI *and* whatever that CLI needs to be launched
+/// with, which is how a Claude subscription is chosen.
 pub struct Picker {
     projects: Vec<Project>,
+    profiles: Vec<Profile>,
     filter: String,
     selected: usize,
-    kind: usize,
+    profile: usize,
     /// Why the last attempt to hold something failed, if it did.
     error: Option<String>,
 }
 
 impl Picker {
-    pub fn new(projects: Vec<Project>) -> Self {
-        Self { projects, filter: String::new(), selected: 0, kind: 0, error: None }
+    /// Opens on `profile`, which is the configured default, so the common case
+    /// is enter and nothing else.
+    pub fn new(projects: Vec<Project>, profiles: Vec<Profile>, profile: usize) -> Self {
+        let profile = if profile < profiles.len() { profile } else { 0 };
+        Self { projects, profiles, filter: String::new(), selected: 0, profile, error: None }
     }
 
     pub fn error(&self) -> Option<&str> {
@@ -56,13 +59,20 @@ impl Picker {
         &self.filter
     }
 
-    pub fn kind(&self) -> &'static str {
-        KINDS[self.kind]
+    pub fn profile(&self) -> Option<&Profile> {
+        self.profiles.get(self.profile)
     }
 
-    pub fn cycle_kind(&mut self) {
+    /// What the modal writes next to `tab`.
+    pub fn profile_label(&self) -> String {
+        self.profile().map(Profile::label).unwrap_or_default()
+    }
+
+    pub fn cycle_profile(&mut self) {
         self.error = None;
-        self.kind = (self.kind + 1) % KINDS.len();
+        if !self.profiles.is_empty() {
+            self.profile = (self.profile + 1) % self.profiles.len();
+        }
     }
 
     /// Ranked, not just filtered: the tightest match comes first.

@@ -213,6 +213,22 @@ impl Theme {
         }
     }
 
+    /// Paints the theme's background onto every cell that has none of its own.
+    ///
+    /// An embedded terminal writes `Color::Reset` for anything the agent never
+    /// coloured, which the terminal would otherwise draw in *its* background
+    /// rather than the theme's. Only `Reset` is replaced, so a background the
+    /// agent set on purpose survives.
+    pub fn fill_default_background(&self, area: Rect, buf: &mut Buffer) {
+        let area = area.intersection(*buf.area());
+        for x in area.left()..area.right() {
+            for y in area.top()..area.bottom() {
+                let cell = &mut buf[(x, y)];
+                cell.set_bg(self.background_or_default(cell.bg));
+            }
+        }
+    }
+
     pub fn clear_area(&self, area: Rect, buf: &mut Buffer) {
         let area = area.intersection(*buf.area());
         if area.is_empty() {

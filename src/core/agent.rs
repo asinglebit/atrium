@@ -10,6 +10,7 @@ use crate::{
     adapters::{self, StatusSource, Wiring},
     core::{
         git::{self, GitContext},
+        profile::Profile,
         pty::PtySession,
     },
 };
@@ -70,17 +71,31 @@ pub struct AgentSpec {
     pub program: String,
     pub args: Vec<String>,
     pub cwd: PathBuf,
+    /// Added to the child's environment. A Claude subscription is exactly this:
+    /// a `CLAUDE_CONFIG_DIR` pointing somewhere other than the default.
+    pub env: Vec<(String, String)>,
+    /// The profile this came from, for the sidebar row. None when it did not
+    /// come from a named one.
+    pub profile: Option<String>,
 }
 
 impl AgentSpec {
     pub fn new(program: impl Into<String>, args: Vec<String>, cwd: impl Into<PathBuf>) -> Self {
-        Self { program: program.into(), args, cwd: cwd.into() }
+        Self { program: program.into(), args, cwd: cwd.into(), env: Vec::new(), profile: None }
+    }
+
+    pub fn from_profile(profile: &Profile, cwd: impl Into<PathBuf>) -> Self {
+        Self { program: profile.program.clone(), args: profile.args.clone(), cwd: cwd.into(), env: profile.env.clone(), profile: profile.tag() }
     }
 
     pub fn command(&self) -> CommandBuilder {
         let mut cmd = CommandBuilder::new(&self.program);
         cmd.args(&self.args);
         cmd.cwd(&self.cwd);
+        // Before the adapter's own wiring, so a profile cannot shadow ATRIUM_*.
+        for (key, value) in &self.env {
+            cmd.env(key, value);
+        }
         cmd
     }
 
@@ -102,6 +117,9 @@ pub struct Agent {
     pub id: u64,
     pub name: String,
     pub cwd: PathBuf,
+    /// Which profile it was held under, when that says something a bare CLI
+    /// name would not.
+    pub profile: Option<String>,
     pub status: Status,
     source: StatusSource,
     git: Option<GitContext>,
@@ -118,7 +136,7 @@ impl Agent {
 
         let session = PtySession::spawn(cmd, rows, cols)?;
         let git = git::context_for(&spec.cwd);
-        Ok(Self { id, name: spec.name(), cwd: spec.cwd.clone(), status: Status::Idle, source: kind.status_source(), git, session })
+        Ok(Self { id, name: spec.name(), cwd: spec.cwd.clone(), profile: spec.profile.clone(), status: Status::Idle, source: kind.status_source(), git, session })
     }
 
     pub fn git(&self) -> Option<&GitContext> {

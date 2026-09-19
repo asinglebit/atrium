@@ -21,6 +21,24 @@ Everything atrium does not claim for itself:
 
 Input goes only to the focused agent, and only while it can still read it.
 
+## The background
+
+The agent paints its own cells, and writes `Color::Reset` for every cell it
+never coloured — which a terminal draws in **its** background, not the theme's.
+Left alone, the pane that fills most of the screen would be the one pane
+ignoring [[Themes|the theme]].
+
+So after the widget has rendered, atrium walks the stage's cells and replaces
+`Reset` backgrounds with the theme's. Three things make that the shape it is:
+
+- **`PseudoTerminal::style()` is not the fix.** tui-term 0.3.4 stores it and
+  never reads it; `state::handle` only ever consults `cursor.style`.
+- **Painting underneath does not work**, because the widget opens with `Clear`.
+  The pass has to run *after* it.
+- **Only `Reset` is replaced.** A background the agent set on purpose — a
+  selected line, a diff marker — is its own and is left alone. Foregrounds are
+  left alone too.
+
 ## Sizing
 
 Every agent is resized to the stage, not only the focused one — see

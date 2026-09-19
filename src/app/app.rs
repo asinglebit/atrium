@@ -23,6 +23,7 @@ use crate::{
         agent::{Agent, AgentSpec, Harness},
         config::Config,
         layout_config::{self, LayoutConfig},
+        profile::Profile,
         projects,
         registry::Registry,
     },
@@ -38,6 +39,9 @@ pub struct App {
     registry: Registry,
     theme: Theme,
     keymap: Keymap,
+    /// What can be held, and which of them the picker opens on.
+    profiles: Vec<Profile>,
+    default_profile: usize,
     harness: Harness,
     server: StatusServer,
     started: Instant,
@@ -108,6 +112,8 @@ impl App {
             registry,
             theme: config.theme,
             keymap: config.keymap,
+            profiles: config.profiles,
+            default_profile: config.default_profile,
             harness,
             server,
             started: Instant::now(),
@@ -176,7 +182,7 @@ impl App {
                 draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, self.sidebar_scroll);
             }
             if let Some(agent) = self.registry.focused() {
-                draw::stage::draw(frame, layout.stage, agent.session());
+                draw::stage::draw(frame, layout.stage, agent.session(), &self.theme);
             }
         }
         draw::statusbar::draw(frame, &layout, &self.registry, &self.theme);
@@ -394,7 +400,7 @@ impl App {
     }
 
     fn open_picker(&mut self) {
-        self.modal = Some(Modal::NewAgent(Picker::new(projects::discover(&projects::default_root()))));
+        self.modal = Some(Modal::NewAgent(Picker::new(projects::discover(&projects::default_root()), self.profiles.clone(), self.default_profile)));
     }
 
     /// The goto list is short and numbered, so a digit is the fast path and
@@ -439,7 +445,7 @@ impl App {
         match key.code {
             KeyCode::Esc => self.modal = None,
             KeyCode::Enter => return self.hold_picked(),
-            KeyCode::Tab => picker.cycle_kind(),
+            KeyCode::Tab => picker.cycle_profile(),
             KeyCode::Down => picker.move_down(),
             KeyCode::Up => picker.move_up(),
             KeyCode::Backspace => picker.backspace(),
@@ -458,8 +464,11 @@ impl App {
         let Some(project) = picker.selected_project() else {
             return Ok(());
         };
+        let Some(profile) = picker.profile() else {
+            return Ok(());
+        };
 
-        let spec = AgentSpec::new(picker.kind(), Vec::new(), project.path.clone());
+        let spec = AgentSpec::from_profile(profile, project.path.clone());
         match Agent::spawn(&spec, &self.harness, self.stage.height, self.stage.width) {
             Ok(agent) => {
                 self.registry.push(agent);

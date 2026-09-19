@@ -5,6 +5,7 @@ pub mod core {
     pub mod config;
     pub mod git;
     pub mod layout_config;
+    pub mod profile;
     pub mod projects;
     pub mod pty;
     pub mod registry;

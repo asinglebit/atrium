@@ -55,9 +55,10 @@ because agents call back into it by absolute path — see below.
 ## Use
 
 ```sh
-atrium                 # hold a claude in the current directory
-atrium bash --norc     # hold anything else
-atrium --check-config  # what the config says, and what it got wrong
+atrium                    # hold the default profile here
+atrium --profile personal # hold a different one
+atrium bash --norc        # hold anything else, with no profile at all
+atrium --check-config     # what the config says, and what it got wrong
 ```
 
 Everything you type goes to the focused agent, except these, which fire
@@ -65,7 +66,7 @@ directly — there is no leader to press first:
 
 | | |
 | --- | --- |
-| `ctrl+t` | hold a new agent — pick a project, pick a CLI |
+| `ctrl+t` | hold a new agent — pick a project, `tab` picks the profile |
 | `ctrl+x` | close this one; closing the last ends atrium |
 | `ctrl+n` / `ctrl+p` | next / previous |
 | `ctrl+g` | go to, where `1`…`9` jump straight to a row |
@@ -84,6 +85,18 @@ on, so the agent's own mouse support keeps working.
 `~/.config/atrium/config.toml`, all of it optional:
 
 ```toml
+default = "work"           # which profile a bare `atrium` holds
+
+[[profiles]]
+name = "work"
+config_dir = "~/.claude-work"
+args = ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"]
+
+[[profiles]]
+name = "personal"
+config_dir = "~/.claude-personal"
+args = ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"]
+
 [theme]
 name = "one dark warmer"   # any of guitar's ~30 preset names
 
@@ -97,6 +110,13 @@ dismiss = "ctrl+x"
 next = "ctrl+n"
 previous = "ctrl+p"
 ```
+
+A **profile** is a CLI plus what it needs to be launched with. `config_dir` is
+shorthand for `CLAUDE_CONFIG_DIR`, so a Claude subscription is one profile —
+`env = { … }` covers anything else, `program` defaults to `claude`, and both
+`~` and `$VAR` expand so a path can be pasted straight out of a shell alias.
+With no `[[profiles]]` at all you get `claude`, `opencode` and `codex`, exactly
+as before. Inside `ctrl+t`, `tab` cycles them.
 
 Themes are easier picked than typed: `ctrl+s` opens settings, where the themes
 tab lists all thirty and Enter applies one. Individual colours are **not** set
@@ -115,6 +135,7 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/core/projects.rs` | Finds git repositories under the projects root |
 | `src/core/git.rs` | Branch and dirty flag for a sidebar row |
 | `src/core/config.rs` | Reads `config.toml`, keeping a list of what it got wrong |
+| `src/core/profile.rs` | A named launch recipe — program, args, environment — and the `~`/`$VAR` expansion |
 | `src/core/layout_config.rs` | The one thing atrium writes back: the sidebar's width, in `layout.json` |
 | `src/adapters/` | Per-CLI launch and status wiring — `claude`, and stubs for `opencode` and `codex` |
 | `src/ipc/server.rs` | The unix socket agents report back through |
@@ -157,6 +178,26 @@ legacy encoding, and there crossterm maps the bytes `0x1C`..`0x1F` onto
 written `ctrl+]` can never match. Outside a letter a terminal has a byte for
 almost nothing, which is the same fact behind `ctrl+1`..`ctrl+9` below. A test
 now asserts every default is a ctrl **letter**.
+
+**A subscription is an environment variable, so it is a profile rather than a
+special case.** `clw` and `clp` were shell aliases setting `CLAUDE_CONFIG_DIR`
+and adding a system-prompt flag — nothing atrium could reach, because an
+`AgentSpec` carried only a program, its arguments and a directory. It now
+carries environment too, which is all a subscription ever was. The picker's
+`tab` stopped cycling bare CLI names and started cycling profiles, so the axis
+that already existed does the job and the modal gained no new key. A profile
+whose name is its program renders as just `claude`, and tags no row — otherwise
+every row would carry the same word and say nothing.
+
+**The stage needed the theme painted back on, one cell at a time.** An embedded
+terminal writes `Color::Reset` for anything the agent never coloured, and the
+terminal draws that in *its* background rather than the theme's — so the one
+pane that fills most of the screen was the one pane ignoring the theme.
+`PseudoTerminal::style()` looks like the fix and is not: tui-term 0.3.4 stores
+it and never reads it, and `state::handle` only ever consults `cursor.style`.
+Painting underneath does not work either, because the widget opens with
+`Clear`. So the pass runs *after* the widget, replacing `Reset` and nothing
+else, which leaves every colour the agent chose on purpose alone.
 
 **Closing an agent kills it, because letting go of the pty does not.** Dropping
 a session closes atrium's end, which only hangs the child up — a CLI is free to

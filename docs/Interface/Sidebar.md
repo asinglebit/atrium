@@ -10,17 +10,23 @@ One row per held agent, down the left. `src/app/draw/sidebar.rs`.
 
 ## A row
 
-`<status mark> <jump number> <name> <branch>`
+`<status mark> <jump number> <name> <profile> <branch>`
 
 - The **mark** is the [[Status]] glyph, spinning when the agent is working.
 - The **number** is only on the first nine rows, because only those can be
   jumped to by digit from the goto list (see [[Modals]]).
 - The **name** is the working directory's own name.
+- The **profile** is which [[Profiles|subscription]] it is held under — absent
+  for a bare CLI, since every row would otherwise carry the same word. Two
+  agents on one project are told apart by this and nothing else.
 - The **branch** carries a `*` when the tree is dirty.
 
-Branches share **one right-aligned column** sized to the longest of them, so the
-names line up on the left and the branches line up on the right instead of each
-row finding its own edge. A name is never squeezed below 8 columns to make room.
+The profile and the branch each get **one column across every row**, sized to
+the longest of them, so the names line up on the left and the rest line up on
+the right instead of each row finding its own edge. A column no row fills costs
+nothing, separating space included. A name is never squeezed below 8 columns to
+make room, and the branch gives ground before the profile does — the profile is
+what makes two otherwise identical rows readable.
 
 Rows are zebra-striped the way guitar stripes its panes: the focused row takes
 `COLOR_GREY_800`, every other row `COLOR_GREY_900`. There is **no heading** —

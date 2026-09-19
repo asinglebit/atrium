@@ -35,7 +35,7 @@ pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker, theme: &Theme) {
         Line::from(vec![
             Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" "),
-            Span::styled(picker.kind(), Style::default().fg(theme.COLOR_GREY_300)),
+            Span::styled(picker.profile_label(), Style::default().fg(theme.COLOR_GREY_300)),
             Span::styled("   enter hold · esc cancel", Style::default().fg(theme.COLOR_GREY_600)),
         ]),
     ];

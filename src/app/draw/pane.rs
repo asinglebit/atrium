@@ -111,20 +111,29 @@ const MIN_NAME_WIDTH: usize = 8;
 /// so the sidebar and the goto list cannot drift apart.
 pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, width: usize) -> Vec<Line<'a>> {
     let branches: Vec<String> = registry.agents().iter().map(|agent| agent.git().map(|git| format!("{}{}", git.branch, if git.dirty { "*" } else { "" })).unwrap_or_default()).collect();
+    let profiles: Vec<String> = registry.agents().iter().map(|agent| agent.profile.clone().unwrap_or_default()).collect();
 
-    // One branch column for every row, so the names line up on the left and the
-    // branches line up on the right instead of each row finding its own edge.
+    let widest = |values: &[String]| values.iter().map(|value| value.chars().count()).max().unwrap_or(0);
+    // A column nothing fills costs nothing, separating space included.
+    let trailing = |column: usize| if column == 0 { 0 } else { column + 1 };
+
+    // One column each for every row, so the names line up on the left and the
+    // rest line up on the right instead of each row finding its own edge.
     let marker = 4;
     let room = width.saturating_sub(marker);
-    let branch_width = branches.iter().map(|branch| branch.chars().count()).max().unwrap_or(0).min(room.saturating_sub(MIN_NAME_WIDTH + 1));
-    let name_width = room.saturating_sub(if branch_width == 0 { 0 } else { branch_width + 1 });
+    // The branch gives ground before the profile does: two rows on one project
+    // are told apart by the profile and nothing else.
+    let profile_width = widest(&profiles).min(room.saturating_sub(MIN_NAME_WIDTH + 1));
+    let branch_width = widest(&branches).min(room.saturating_sub(MIN_NAME_WIDTH + 1 + trailing(profile_width)));
+    let name_width = room.saturating_sub(trailing(profile_width) + trailing(branch_width));
 
     registry
         .agents()
         .iter()
         .zip(&branches)
+        .zip(&profiles)
         .enumerate()
-        .map(|(index, (agent, branch))| {
+        .map(|(index, ((agent, branch), profile))| {
             // Only the first nine get a jump number, so only they are numbered.
             let key = if index < 9 { format!("{} ", index + 1) } else { "  ".to_owned() };
             // A working agent spins where the others show a steady glyph.
@@ -136,6 +145,9 @@ pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, width:
                 Span::styled(key, Style::default().fg(theme.COLOR_GREY_600)),
                 Span::styled(format!("{:<name_width$}", truncate(&agent.name, name_width)), Style::default().fg(body)),
             ];
+            if profile_width > 0 {
+                spans.push(Span::styled(format!(" {:<profile_width$}", truncate(profile, profile_width)), Style::default().fg(theme.COLOR_GREY_600)));
+            }
             if branch_width > 0 {
                 spans.push(Span::styled(format!(" {:>branch_width$}", truncate(branch, branch_width)), Style::default().fg(theme.COLOR_GREY_600)));
             }

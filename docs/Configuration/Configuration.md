@@ -4,7 +4,7 @@ Three files, in `~/.config/atrium/`. **One of them is yours, two are atrium's.**
 
 | File | Written by | Holds |
 | --- | --- | --- |
-| `config.toml` | You | Theme name and key bindings |
+| `config.toml` | You | Theme name, key bindings, and [[Profiles]] |
 | `theme.json` | atrium | The actual colours — see [[Themes]] |
 | `layout.json` | atrium | The [[Sidebar]] width |
 
@@ -16,6 +16,17 @@ cannot keep in a dotfiles repo.
 All of it optional:
 
 ```toml
+default = "work"           # which profile a bare `atrium` holds
+
+[[profiles]]
+name = "work"
+config_dir = "~/.claude-work"
+args = ["--append-system-prompt-file", "$DOTFILES/shared/prompts/system-prompt.md"]
+
+[[profiles]]
+name = "personal"
+config_dir = "~/.claude-personal"
+
 [theme]
 name = "one dark warmer"   # any of the 47 preset names
 
@@ -31,7 +42,8 @@ previous = "ctrl+p"
 ```
 
 See [[Keys]] for how a chord is written, and for the constraint that a binding
-has to be one a terminal can actually deliver.
+has to be one a terminal can actually deliver. See [[Profiles]] for what a
+profile block can say — including that `~` and `$VAR` are expanded in it.
 
 Anything the file gets wrong is **kept rather than discarded**, so it can be
 reported instead of failing silently. The TUI carries on with the defaults.
@@ -67,3 +79,4 @@ over it.
 | `ATRIUM_PROJECTS` | Where [[Projects]] are looked for. Defaults to `~/projects` |
 | `XDG_RUNTIME_DIR` | Where the status socket lives — see [[Adapters and hooks]] |
 | `ATRIUM_AGENT_ID`, `ATRIUM_SOCK` | Set *by* atrium on each agent, not by you |
+| `CLAUDE_CONFIG_DIR` | Set by atrium from a profile's `config_dir`, which is what picks a subscription |

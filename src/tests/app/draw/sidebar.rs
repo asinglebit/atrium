@@ -120,3 +120,48 @@ fn a_click_below_the_pane_lands_nowhere() {
     assert_eq!(row_at(area, 0, 14), None);
     assert_eq!(row_at(area, 0, 99), None);
 }
+
+/// The same registry, but held under a named profile the way a subscription is.
+fn registry_under(entries: &[(&str, &str)]) -> Registry {
+    let mut registry = Registry::new();
+    for (dir, name) in entries {
+        let profile = crate::core::profile::Profile { name: (*name).to_owned(), program: "cat".to_owned(), args: Vec::new(), env: Vec::new() };
+        let spec = AgentSpec::from_profile(&profile, *dir);
+        registry.push(Agent::spawn(&spec, &harness(), 24, 80).expect("pty should open"));
+    }
+    registry
+}
+
+#[test]
+fn a_row_says_which_profile_it_is_held_under() {
+    let registry = registry_under(&[("/tmp", "work"), ("/usr", "personal")]);
+    let out = rendered(&registry);
+
+    assert!(out.contains("work"), "expected the work tag in:\n{out}");
+    assert!(out.contains("personal"), "expected the personal tag in:\n{out}");
+}
+
+#[test]
+fn two_agents_on_one_project_are_told_apart_by_their_profile() {
+    let registry = registry_under(&[("/tmp", "work"), ("/tmp", "personal")]);
+    let rows: Vec<String> = rendered(&registry).lines().take(2).map(str::to_owned).collect();
+
+    assert_ne!(rows[0], rows[1], "identical rows are the problem profiles exist to solve:\n{rows:?}");
+}
+
+/// The row without its last column, which is the gutter the scrollbar rides on.
+fn row_body(out: &str) -> String {
+    let mut chars: Vec<char> = out.lines().next().unwrap_or_default().chars().collect();
+    chars.pop();
+    chars.into_iter().collect::<String>().trim_end().to_owned()
+}
+
+#[test]
+fn no_profile_anywhere_costs_the_row_no_columns() {
+    let plain = rendered(&registry_of(&["/tmp"]));
+    let tagged = rendered(&registry_under(&[("/tmp", "work")]));
+
+    assert!(!plain.contains("work"));
+    assert!(row_body(&plain).ends_with("tmp"), "nothing should follow the name when no agent has a profile:\n{plain}");
+    assert!(row_body(&tagged).ends_with("work"), "the tag belongs after the name:\n{tagged}");
+}

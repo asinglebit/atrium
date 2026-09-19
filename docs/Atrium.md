@@ -20,6 +20,7 @@ is why the defaults are opinionated and the scope stops where that work stops.
 - [[Agents]] — what atrium holds, and how it holds it
 - [[Registry and focus]] — the held set, and which one is on the stage
 - [[Status]] — the five states, where they come from, what they look like
+- [[Profiles]] — subscriptions, and anything else a CLI needs to be launched with
 - [[Projects]] — how the project list is found
 
 ### Interface

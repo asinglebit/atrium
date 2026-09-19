@@ -1,8 +1,22 @@
 use super::*;
+use crate::core::profile;
 use std::path::PathBuf;
 
 fn picker_of(names: &[&str]) -> Picker {
-    Picker::new(names.iter().map(|name| Project { name: (*name).to_owned(), path: PathBuf::from("/projects").join(name) }).collect())
+    with_profiles(names, profile::defaults())
+}
+
+/// The picker opens on the profile it is handed, which is the configured
+/// default -- index 0 here, as in a config that names none.
+fn with_profiles(names: &[&str], profiles: Vec<Profile>) -> Picker {
+    Picker::new(names.iter().map(|name| Project { name: (*name).to_owned(), path: PathBuf::from("/projects").join(name) }).collect(), profiles, 0)
+}
+
+fn subscriptions() -> Vec<Profile> {
+    ["work", "personal"]
+        .iter()
+        .map(|name| Profile { name: (*name).to_owned(), program: "claude".to_owned(), args: Vec::new(), env: vec![(profile::CONFIG_DIR_ENV.to_owned(), format!("/home/x/.claude-{name}"))] })
+        .collect()
 }
 
 fn names(picker: &Picker) -> Vec<String> {
@@ -126,24 +140,58 @@ fn the_selected_project_is_the_highlighted_one() {
 }
 
 #[test]
-fn tab_cycles_through_every_agent_cli_and_comes_back() {
-    let mut picker = picker_of(&["atrium"]);
-    let first = picker.kind();
-    let seen: Vec<&str> = (0..KINDS.len())
+fn tab_cycles_through_every_profile_and_comes_back() {
+    let mut picker = with_profiles(&["atrium"], subscriptions());
+
+    assert_eq!(picker.profile_label(), "claude · work");
+    picker.cycle_profile();
+    assert_eq!(picker.profile_label(), "claude · personal");
+    picker.cycle_profile();
+    assert_eq!(picker.profile_label(), "claude · work", "cycling all the way round should return to the start");
+}
+
+#[test]
+fn with_nothing_configured_it_offers_the_clis_it_knows() {
+    let mut picker = picker_of(&[]);
+
+    let seen: Vec<String> = profile::DEFAULT_PROGRAMS
+        .iter()
         .map(|_| {
-            let kind = picker.kind();
-            picker.cycle_kind();
-            kind
+            let label = picker.profile_label();
+            picker.cycle_profile();
+            label
         })
         .collect();
 
-    assert_eq!(seen.len(), KINDS.len());
-    assert_eq!(picker.kind(), first, "cycling all the way round should return to the start");
+    assert_eq!(seen, profile::DEFAULT_PROGRAMS, "a bare cli should name itself once, not twice");
 }
 
 #[test]
 fn claude_is_what_it_offers_first() {
-    assert_eq!(picker_of(&[]).kind(), "claude");
+    assert_eq!(picker_of(&[]).profile_label(), "claude");
+}
+
+#[test]
+fn it_opens_on_the_profile_it_is_handed() {
+    let picker = Picker::new(Vec::new(), subscriptions(), 1);
+
+    assert_eq!(picker.profile_label(), "claude · personal");
+}
+
+#[test]
+fn a_default_that_is_out_of_range_falls_back_to_the_first() {
+    let picker = Picker::new(Vec::new(), subscriptions(), 99);
+
+    assert_eq!(picker.profile_label(), "claude · work");
+}
+
+#[test]
+fn the_chosen_profile_is_what_gets_held() {
+    let mut picker = with_profiles(&["atrium"], subscriptions());
+    picker.cycle_profile();
+
+    let chosen = picker.profile().expect("a profile");
+    assert_eq!(chosen.config_dir(), Some("/home/x/.claude-personal"));
 }
 
 #[test]
@@ -160,8 +208,8 @@ fn changing_the_choice_clears_a_stale_error() {
     let mut picker = picker_of(&["atrium"]);
 
     picker.set_error("boom");
-    picker.cycle_kind();
-    assert!(picker.error().is_none(), "picking a different cli should drop the old failure");
+    picker.cycle_profile();
+    assert!(picker.error().is_none(), "picking a different profile should drop the old failure");
 
     picker.set_error("boom");
     picker.push('a');

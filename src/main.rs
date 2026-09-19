@@ -1,28 +1,41 @@
 use std::io;
 
-use atrium::{AgentSpec, App, Config, VERSION, core::projects, helpers::palette, ipc::hook};
+use atrium::{
+    AgentSpec, App, Config, VERSION,
+    core::{profile, projects},
+    helpers::palette,
+    ipc::hook,
+};
 use crossterm::{
     event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
     execute,
 };
 
-/// What atrium holds when you do not say otherwise.
-const DEFAULT_AGENT: &str = "claude";
-
 /// The subcommand agents call back through. Not a program you would run.
 const HOOK_SUBCOMMAND: &str = "hook";
+
+/// Holds a named profile rather than the default one.
+const PROFILE_FLAG: &str = "--profile";
 
 const HELP: &str = "\
 atrium -- a terminal UI that holds coding agents
 
 USAGE
-    atrium [COMMAND ...]      hold COMMAND, or `claude` if none is given
+    atrium                    hold the default profile
+    atrium --profile NAME     hold that profile instead
+    atrium [COMMAND ...]      hold COMMAND, with no profile at all
     atrium hook <EVENT>       report an agent's status (agents call this, you do not)
 
 OPTIONS
     -h, --help                show this
     -v, --version             show the version
         --check-config        report what the config file says, and what it got wrong
+
+PROFILES
+    A profile is a CLI plus what it needs: extra flags, and extra environment.
+    A Claude subscription is one of these -- `config_dir` sets CLAUDE_CONFIG_DIR,
+    so `work` and `personal` are two profiles rather than two shell aliases.
+    Inside the new-agent modal, `tab` cycles them.
 
 KEYS
     Actions fire directly; every other key reaches the focused agent.
@@ -63,6 +76,17 @@ fn check_config() {
     println!("  theme:  {}", config.theme.name.label());
     println!("  projects: {}", projects::default_root().display());
 
+    println!("  profiles:  (* is what a bare `atrium` holds)");
+    for (index, entry) in config.profiles.iter().enumerate() {
+        println!("   {} {}", if index == config.default_profile { "*" } else { " " }, entry.label());
+        if let Some(dir) = entry.config_dir() {
+            println!("       {}={dir}", profile::CONFIG_DIR_ENV);
+        }
+        if !entry.args.is_empty() {
+            println!("       args: {}", entry.args.join(" "));
+        }
+    }
+
     if config.problems.is_empty() {
         println!("  no problems");
         return;
@@ -76,12 +100,34 @@ fn check_config() {
     std::process::exit(1);
 }
 
-fn agent_spec(args: &[String]) -> AgentSpec {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| ".".into());
+fn cwd() -> std::path::PathBuf {
+    std::env::current_dir().unwrap_or_else(|_| ".".into())
+}
+
+/// A named command is held exactly as written, with no profile attached --
+/// `atrium bash --norc` should not pick up Claude's environment.
+fn agent_spec(args: &[String], config: &Config) -> AgentSpec {
     match args.split_first() {
-        Some((program, rest)) => AgentSpec::new(program.clone(), rest.to_vec(), cwd),
-        None => AgentSpec::new(DEFAULT_AGENT, Vec::new(), cwd),
+        Some((program, rest)) => AgentSpec::new(program.clone(), rest.to_vec(), cwd()),
+        None => AgentSpec::from_profile(config.default_profile(), cwd()),
     }
+}
+
+fn profile_names(config: &Config) -> String {
+    config.profiles.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>().join(", ")
+}
+
+/// The one flag that replaces having a shell alias per subscription.
+fn run_profile(name: Option<&String>, config: Config) -> io::Result<()> {
+    let Some(name) = name else {
+        eprintln!("--profile needs a name. There is: {}", profile_names(&config));
+        std::process::exit(2);
+    };
+    let Some(profile) = config.profile_named(name).cloned() else {
+        eprintln!("no profile named {name:?}. There is: {}", profile_names(&config));
+        std::process::exit(1);
+    };
+    run_tui(AgentSpec::from_profile(&profile, cwd()), config)
 }
 
 fn run_tui(spec: AgentSpec, config: Config) -> io::Result<()> {
@@ -116,8 +162,11 @@ fn main() -> io::Result<()> {
             check_config();
             return Ok(());
         },
+        Some(PROFILE_FLAG) => return run_profile(args.get(1), Config::load()),
         _ => {},
     }
 
-    run_tui(agent_spec(&args), Config::load())
+    let config = Config::load();
+    let spec = agent_spec(&args, &config);
+    run_tui(spec, config)
 }
