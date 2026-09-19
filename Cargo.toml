@@ -1,0 +1,32 @@
+[package]
+name = "atrium"
+version = "0.1.0"
+description = "A terminal UI that holds coding agents"
+authors = ["rattleworks <gasimov.abdulali@gmail.com>"]
+edition = "2024"
+default-run = "atrium"
+repository = "https://github.com/asinglebit/atrium/"
+readme = "README.md"
+license = "GPL-3.0-only"
+
+[dependencies]
+crossterm = "0.29.0"
+portable-pty = "0.9.0"
+ratatui = "0.30.0"
+tui-term = "0.3.4"
+vt100 = "0.16.2"
+
+[dev-dependencies]
+divan = "0.1"
+
+# Mirrors guitar's release profile: slower builds, marginally smaller and faster
+# binaries.
+[profile.release]
+codegen-units = 1
+lto = "fat"
+strip = "debuginfo"
+
+[profile.bench]
+inherits = "release"
+debug = 2
+strip = false
