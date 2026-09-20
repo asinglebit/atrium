@@ -1,6 +1,19 @@
-use std::io;
+use std::{io, path::PathBuf};
 
-use crate::{core::agent::Agent, ipc::wire::Report};
+use crate::{
+    core::agent::{Agent, Status},
+    ipc::wire::Report,
+};
+
+/// How many agents are held, and how many of them are in each state worth
+/// counting. What the bar segment outside atrium shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Counts {
+    pub held: usize,
+    pub working: usize,
+    pub needs_input: usize,
+    pub error: usize,
+}
 
 /// The agents this atrium is holding, and which one the stage is showing.
 #[derive(Default)]
@@ -110,6 +123,46 @@ impl Registry {
         for agent in &mut self.agents {
             agent.refresh_status();
         }
+    }
+
+    /// The worst of what the held agents are doing -- what this atrium needs,
+    /// in one word, for whatever is showing it from outside.
+    ///
+    /// `Exited` is left out: a row that has finished is not something to be
+    /// pulled back to, and an atrium holding nothing but dead agents needs
+    /// nothing.
+    pub fn aggregate(&self) -> Option<Status> {
+        self.agents.iter().map(|agent| agent.status).filter(|status| *status != Status::Exited).max_by_key(|status| match status {
+            Status::Error => 4,
+            Status::NeedsInput => 3,
+            Status::Working => 2,
+            Status::Idle => 1,
+            Status::Exited => 0,
+        })
+    }
+
+    /// How many are held and what they are doing. `held` counts the dead ones
+    /// too, because a row is still a row.
+    pub fn counts(&self) -> Counts {
+        let mut counts = Counts { held: self.agents.len(), ..Counts::default() };
+        for agent in &self.agents {
+            match agent.status {
+                Status::Working => counts.working += 1,
+                Status::NeedsInput => counts.needs_input += 1,
+                Status::Error => counts.error += 1,
+                Status::Idle | Status::Exited => {},
+            }
+        }
+        counts
+    }
+
+    /// The distinct directories the held agents stand in, which is where to
+    /// look for worktrees that appeared without anyone saying so.
+    pub fn repos(&self) -> Vec<PathBuf> {
+        let mut repos: Vec<PathBuf> = self.agents.iter().map(|agent| agent.cwd().to_path_buf()).collect();
+        repos.sort();
+        repos.dedup();
+        repos
     }
 }
 

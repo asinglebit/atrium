@@ -108,3 +108,73 @@ fn a_live_agent_is_not_reported_as_exited() {
     registry.refresh();
     assert_eq!(registry.focused().expect("agent").status, Status::Idle);
 }
+
+/// Statuses only ever arrive through a report, so a test that wants one sets
+/// it the same way the hook feed does.
+fn set_status(registry: &mut Registry, index: usize, event: &str) {
+    let id = registry.agents()[index].id;
+    registry.apply(&Report { agent_id: id, event: event.to_owned() });
+}
+
+#[test]
+fn an_atrium_holding_nothing_needs_nothing() {
+    assert!(Registry::new().aggregate().is_none());
+}
+
+#[test]
+fn the_worst_status_is_the_one_that_carries() {
+    let mut registry = registry_of(3);
+    set_status(&mut registry, 0, "Stop");
+    set_status(&mut registry, 1, "UserPromptSubmit");
+    set_status(&mut registry, 2, "Notification");
+    assert_eq!(registry.aggregate(), Some(Status::NeedsInput), "one agent waiting outranks two that are not");
+
+    set_status(&mut registry, 0, "StopFailure");
+    assert_eq!(registry.aggregate(), Some(Status::Error), "an error outranks even that");
+}
+
+#[test]
+fn an_atrium_holding_only_dead_agents_needs_nothing() {
+    let mut registry = registry_of(2);
+    set_status(&mut registry, 0, "SessionEnd");
+    set_status(&mut registry, 1, "SessionEnd");
+    assert!(registry.aggregate().is_none(), "a finished row is not something to be pulled back to");
+}
+
+#[test]
+fn a_dead_agent_does_not_drown_out_a_live_one() {
+    let mut registry = registry_of(2);
+    set_status(&mut registry, 0, "SessionEnd");
+    set_status(&mut registry, 1, "Notification");
+    assert_eq!(registry.aggregate(), Some(Status::NeedsInput));
+}
+
+#[test]
+fn the_counts_say_how_many_are_in_each_state() {
+    let mut registry = registry_of(4);
+    set_status(&mut registry, 0, "UserPromptSubmit");
+    set_status(&mut registry, 1, "UserPromptSubmit");
+    set_status(&mut registry, 2, "Notification");
+    set_status(&mut registry, 3, "StopFailure");
+
+    let counts = registry.counts();
+    assert_eq!(counts.held, 4);
+    assert_eq!(counts.working, 2);
+    assert_eq!(counts.needs_input, 1);
+    assert_eq!(counts.error, 1);
+}
+
+#[test]
+fn a_dead_agent_is_still_held() {
+    let mut registry = registry_of(1);
+    set_status(&mut registry, 0, "SessionEnd");
+    assert_eq!(registry.counts().held, 1, "a row is still a row");
+}
+
+#[test]
+fn one_repository_is_reported_once_however_many_agents_stand_in_it() {
+    let mut registry = Registry::new();
+    registry.push(held("/tmp"));
+    registry.push(held("/tmp"));
+    assert_eq!(registry.repos(), vec![PathBuf::from("/tmp")]);
+}

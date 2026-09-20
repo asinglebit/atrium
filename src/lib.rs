@@ -6,11 +6,14 @@ pub mod core {
     pub mod git;
     pub mod installed;
     pub mod layout_config;
+    pub mod notify;
     pub mod profile;
     pub mod profiles_file;
     pub mod projects;
     pub mod pty;
     pub mod registry;
+    pub mod tmux;
+    pub mod worktree;
 }
 pub mod helpers {
     pub mod json;
