@@ -66,28 +66,24 @@ fn key_name(code: KeyCode) -> String {
     }
 }
 
-/// Which chord does what. These fire directly -- there is no leader to press
-/// first -- so each one is a key the agent can no longer have. The defaults are
-/// picked for what they cost, not for the mnemonic:
+/// Which key does what, once `action` has been pressed.
 ///
-/// - `ctrl+t` transposes characters in readline, and opens Claude's todo panel.
-/// - `ctrl+n` / `ctrl+p` walk shell history; Claude's own box uses the arrows.
-/// - `ctrl+g` aborts a readline entry, which is rarely asked for on purpose.
-/// - `ctrl+x` opens a two-key readline prefix, and an agent's own input box
-///   implements no second key to follow it.
-/// - `ctrl+q` and `ctrl+s` are XON and XOFF, and raw mode has already turned
-///   flow control off, so neither can freeze anything.
-/// - `ctrl+o` is readline's operate-and-get-next, which nothing asks for.
+/// Nothing here fires on its own. Every keystroke reaches the agent, and the
+/// only chord atrium takes is `action` -- so an agent keeps `ctrl+t`,
+/// `ctrl+n`, `ctrl+p` and the rest, which it never did before. This is
+/// guitar's action mode, for the same reason: the keys worth having are the
+/// ones the thing underneath is not already using.
 ///
-/// Deliberately untouched: `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+l`,
-/// `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`, `ctrl+k` and `ctrl+[`,
-/// which is Escape.
+/// `ctrl+a` is tmux's prefix, so inside tmux it is pressed twice -- the second
+/// one arrives here because `bind C-a send-prefix` passes it through. That is
+/// how guitar is already driven on this machine.
 ///
-/// A default also has to be a chord a terminal can deliver, which is narrower
-/// than it looks: outside a letter there is usually no byte for it. `ctrl+]`
-/// was the default here and never once fired, because it arrives as `ctrl+5`.
+/// The letters are guitar's where guitar has one: `1` toggles a pane, `?` is
+/// settings, `x` drops a thing, `q` exits, and `j`/`k` walk a list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Keymap {
+    /// The one chord atrium takes from the agent. Everything else follows it.
+    pub action: Chord,
     pub quit: Chord,
     pub goto: Chord,
     pub settings: Chord,
@@ -102,9 +98,13 @@ fn ctrl(c: char) -> Chord {
     Chord { code: KeyCode::Char(c), modifiers: KeyModifiers::CONTROL }
 }
 
+fn key(c: char) -> Chord {
+    Chord::plain(KeyCode::Char(c))
+}
+
 impl Default for Keymap {
     fn default() -> Self {
-        Self { quit: ctrl('q'), goto: ctrl('g'), settings: ctrl('s'), sidebar: ctrl('o'), new: ctrl('t'), dismiss: ctrl('x'), next: ctrl('n'), previous: ctrl('p') }
+        Self { action: ctrl('a'), quit: key('q'), goto: key('g'), settings: key('?'), sidebar: key('1'), new: key('n'), dismiss: key('x'), next: key('j'), previous: key('k') }
     }
 }
 
@@ -112,6 +112,7 @@ impl Keymap {
     /// Applies one `[keys]` entry. False when the name is not one of ours.
     pub fn set(&mut self, action: &str, chord: Chord) -> bool {
         match action {
+            "action" => self.action = chord,
             "quit" => self.quit = chord,
             "goto" => self.goto = chord,
             "settings" => self.settings = chord,
@@ -139,9 +140,20 @@ impl Keymap {
         ]
     }
 
-    /// Every chord atrium claims, so the agent can be told what it will not see.
-    pub fn claimed(&self) -> [Chord; 8] {
-        [self.quit, self.goto, self.settings, self.sidebar, self.new, self.dismiss, self.next, self.previous]
+    /// The one chord atrium claims. Everything else the agent still sees --
+    /// which is the whole point of putting the actions behind a prefix.
+    pub fn claimed(&self) -> [Chord; 1] {
+        [self.action]
+    }
+
+    /// How a binding is written out for a reader: the prefix, then the key.
+    pub fn gesture(&self, chord: Chord) -> String {
+        format!("{} {}", self.action.label(), chord.label())
+    }
+
+    /// The action this key runs, once the prefix has been pressed.
+    pub fn action_for(&self, key: &KeyEvent) -> Option<&'static str> {
+        self.actions().into_iter().find(|(_, chord)| chord.matches(key)).map(|(name, _)| name)
     }
 }
 

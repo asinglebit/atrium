@@ -332,7 +332,7 @@ fn shortcuts(body: &mut Body, context: &Context, width: usize) {
     body.push(section(" keys:", width, theme));
     body.blank();
     for (index, (action, chord)) in context.keymap.actions().iter().enumerate() {
-        body.push(row(&format!(" {action}"), &format!("{} ", chord.label()), width, shade(index, theme)));
+        body.push(row(&format!(" {action}"), &format!("{} ", context.keymap.gesture(*chord)), width, shade(index, theme)));
         body.selectable(SelectionKind::Chord(index));
     }
 }

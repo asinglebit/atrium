@@ -77,18 +77,24 @@ holds that, because you already said.
 
 The sidebar starts hidden; `ctrl+o` brings it in.
 
-Everything you type goes to the focused agent, except these, which fire
-directly — there is no leader to press first:
+**Everything you type goes to the focused agent.** atrium's own actions sit
+behind `ctrl+a`, which is guitar's action mode and the only key atrium takes:
 
 | | |
 | --- | --- |
-| `ctrl+t` | hold a new agent — pick a project, `tab` picks the profile |
-| `ctrl+x` | close this one; closing the last goes back to the splash |
-| `ctrl+n` / `ctrl+p` | next / previous |
-| `ctrl+g` | go to, where `1`…`9` jump straight to a row |
-| `ctrl+o` | show or hide the sidebar |
-| `ctrl+s` | settings |
-| `ctrl+q` | quit |
+| `ctrl+a` `n` | hold a new agent — pick a project, `tab` picks the profile |
+| `ctrl+a` `x` | close this one; closing the last goes back to the splash |
+| `ctrl+a` `j` / `k` | next / previous |
+| `ctrl+a` `g` | go to, where `1`…`9` jump straight to a row |
+| `ctrl+a` `1` | show or hide the sidebar |
+| `ctrl+a` `?` | settings |
+| `ctrl+a` `q` | quit |
+
+Inside tmux, press it twice. `ctrl+a` is tmux's own prefix, and
+`bind C-a send-prefix` is what passes the second one through — which is how
+guitar is already driven here. A key that means nothing after the prefix
+cancels rather than reaching the agent, so half a mistyped gesture never lands
+in a conversation. The status line shows `ctrl+a` while it waits.
 
 The mouse works too. Click a row to put it on the stage, wheel to scroll, and
 drag the line between the panes to resize the sidebar — the width is remembered.
@@ -239,17 +245,17 @@ require a background server, which is the thing this avoids: tmux already does
 persistence, and duplicating it is how you end up writing a multiplexer. If it
 ever matters, the change is to split a server out behind the same sidebar.
 
-**Actions fire directly, so every binding is a key taken from the agent.**
-There is no leader to press first, which makes the choice of defaults the whole
-design: `ctrl+letter` is a crowded space, and anything atrium claims the agent
-never sees. The defaults are picked for what they cost rather than for the
-mnemonic — `ctrl+q` and `ctrl+s` are XON and XOFF and raw mode has already
-turned flow control off, `ctrl+n`/`ctrl+p` cost shell history that Claude's own
-input box does not use, `ctrl+t` costs readline's transpose, and `ctrl+x` costs
-a two-key readline prefix whose second key an agent's input box does not
-implement. A test asserts no default lands on `ctrl+c`, `ctrl+d`, `ctrl+z`,
-`ctrl+v`, `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`, `ctrl+k`
-or `ctrl+[`.
+**One key is taken from the agent, and it is the one tmux already took.**
+atrium used to fire eight `ctrl+letter` chords directly, which meant eight keys
+an agent could never see — `ctrl+t` for readline's transpose, `ctrl+n`/`ctrl+p`
+for shell history, `ctrl+x` for a two-key prefix, and so on. They are all the
+agent's again. What is left is `ctrl+a`, which costs readline's start-of-line,
+and costs nothing at all inside tmux, where it was the prefix and never reached
+the agent to begin with. The keys behind it are bare letters, so they cost
+nothing either: they mean something only after the prefix. A test asserts
+exactly one chord is claimed, that every action key is unmodified, and that the
+claimed one is not `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+l`, `ctrl+r`,
+`ctrl+u`, `ctrl+w`, `ctrl+e`, `ctrl+k` or `ctrl+[`.
 
 **A default also has to be a chord a terminal can actually deliver, which is
 narrower than it looks.** `ctrl+]` was the default for closing an agent and

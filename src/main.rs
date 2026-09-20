@@ -50,19 +50,26 @@ PROFILES
     Inside the new-agent modal, `tab` cycles the lot, and the splash lists it.
 
 KEYS
-    Actions fire directly; every other key reaches the focused agent.
-    ctrl+t  hold a new agent     ctrl+n / ctrl+p  next / previous
-    ctrl+g  go to (1-9 jumps)    ctrl+o           show / hide the sidebar
-    ctrl+x  close this one       ctrl+s           settings
-    ctrl+q  quit
+    Every key reaches the agent. atrium's own actions sit behind ctrl+a, the
+    way guitar's action mode does. Inside tmux press it twice: tmux takes the
+    first one, and `bind C-a send-prefix` passes the second through.
+
+    ctrl+a n  hold a new agent     ctrl+a j / k  next / previous
+    ctrl+a g  go to (1-9 jumps)    ctrl+a 1      show / hide the sidebar
+    ctrl+a x  close this one       ctrl+a ?      settings
+    ctrl+a q  quit
+
+    A key that means nothing after ctrl+a cancels rather than reaching the
+    agent, so half a mistyped gesture never lands in a conversation.
 
     The mouse works: click a row, wheel to scroll, drag the line between the
     panes to resize the sidebar, right-click anywhere for a menu. Inside the
     agent everything else is forwarded on, so the agent's own mouse support
     keeps working.
 
-    Untouched, so the agent keeps them: ctrl+c, ctrl+d, ctrl+z, ctrl+v,
-    ctrl+l, ctrl+r, ctrl+u, ctrl+w, ctrl+a, ctrl+e, ctrl+k, esc.
+    ctrl+a is the one key the agent no longer sees. It keeps everything else,
+    including ctrl+t, ctrl+n, ctrl+p, ctrl+x, ctrl+g, ctrl+o, ctrl+s and
+    ctrl+q, all of which atrium used to take.
 
 CONFIG";
 
@@ -83,8 +90,9 @@ fn check_config() {
     if !path.exists() {
         println!("  (no file yet -- these are the defaults)");
     }
-    let claimed: Vec<String> = config.keymap.claimed().iter().map(|chord| chord.label()).collect();
-    println!("  keys:   {}", claimed.join(", "));
+    println!("  prefix: {}  (the only chord taken from the agent)", config.keymap.action.label());
+    let keys: Vec<String> = config.keymap.actions().iter().map(|(name, chord)| format!("{name} {}", chord.label())).collect();
+    println!("  keys:   {}", keys.join(", "));
     println!("  theme:  {}", config.theme.name.label());
     println!("  projects: {}", projects::default_root().display());
 

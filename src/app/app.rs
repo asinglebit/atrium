@@ -93,6 +93,10 @@ pub struct App {
     /// What each repository's worktrees looked like last time, so one that
     /// appears without anyone saying so is still noticed.
     watch: worktree::Watch,
+    /// True between the prefix and the key that follows it. Nothing else in
+    /// atrium is modal, so this is the only place a keystroke means something
+    /// other than itself.
+    action_mode: bool,
     should_quit: bool,
 }
 
@@ -173,6 +177,7 @@ impl App {
             tmux_pane: tmux::pane(),
             published: None,
             watch: worktree::Watch::new(),
+            action_mode: false,
             should_quit: false,
         })
     }
@@ -276,7 +281,8 @@ impl App {
                     draw::stage::draw(frame, layout.stage, agent.session(), &self.theme);
                 }
             }
-            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme);
+            let pending = self.action_mode.then(|| self.keymap.action.label());
+            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme, pending.as_deref());
         }
 
         match &self.modal {
@@ -343,19 +349,29 @@ impl App {
             },
             None => {},
         }
-        if self.take_action(&key) {
+        // The prefix was pressed, so this key is atrium's whatever it is. One
+        // that means nothing cancels rather than falling through to the agent:
+        // half a mistyped gesture landing in a conversation is worse than
+        // nothing happening.
+        if self.action_mode {
+            self.action_mode = false;
+            self.take_action(&key);
+            return Ok(());
+        }
+        if self.keymap.action.matches(&key) {
+            self.action_mode = true;
             return Ok(());
         }
         // With nothing held there is no agent for a key to reach, so the splash
-        // takes what the chords above did not.
+        // takes it instead.
         if self.registry.is_empty() {
             return self.on_splash_key(key);
         }
         self.send(key)
     }
 
-    /// True when atrium kept the key for itself. Anything it does not claim
-    /// goes straight through, which is most of the keyboard.
+    /// True when the key meant something. Everything reaches the agent now, so
+    /// this only ever runs on the key after the prefix.
     fn take_action(&mut self, key: &KeyEvent) -> bool {
         let keymap = self.keymap;
         if keymap.quit.matches(key) {

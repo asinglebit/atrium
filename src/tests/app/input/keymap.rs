@@ -116,10 +116,26 @@ fn every_action_fires_on_a_ctrl_chord() {
 }
 
 #[test]
-fn no_default_takes_a_key_the_agent_needs() {
+fn atrium_takes_one_chord_and_not_a_key_more() {
+    assert_eq!(Keymap::default().claimed().len(), 1, "everything but the prefix belongs to the agent");
+}
+
+#[test]
+fn the_keys_behind_the_prefix_cost_the_agent_nothing() {
+    // They mean something only after the prefix, so a bare letter here is not
+    // a letter taken away from anyone.
+    for (name, chord) in Keymap::default().actions() {
+        assert!(chord.modifiers.is_empty(), "{name} is {}, which would be claimed outright", chord.label());
+    }
+}
+
+#[test]
+fn the_prefix_is_the_one_readline_key_given_up() {
     // ctrl+[ is Escape, and the rest are signals or readline editing that a
-    // shell or an agent would miss immediately.
-    const RESERVED: [char; 12] = ['c', 'd', 'z', 'v', 'l', 'r', 'u', 'w', 'a', 'e', 'k', '['];
+    // shell or an agent would miss immediately. ctrl+a -- start of line -- is
+    // the single exception, and a deliberate one: it is guitar's action key,
+    // and inside tmux it is the prefix anyway, so an agent there never had it.
+    const RESERVED: [char; 11] = ['c', 'd', 'z', 'v', 'l', 'r', 'u', 'w', 'e', 'k', '['];
 
     for chord in Keymap::default().claimed() {
         if let KeyCode::Char(c) = chord.code {
@@ -174,4 +190,52 @@ fn setting_a_known_action_takes_and_an_unknown_one_does_not() {
     assert!(map.set("quit", chord("ctrl+j")));
     assert_eq!(map.quit, chord("ctrl+j"));
     assert!(!map.set("qit", chord("x")));
+}
+
+#[test]
+fn the_prefix_is_guitars() {
+    assert_eq!(Keymap::default().action.label(), "ctrl+a");
+}
+
+#[test]
+fn the_defaults_are_the_ones_asked_for() {
+    let keymap = Keymap::default();
+    for (name, expected) in [("sidebar", "1"), ("settings", "?"), ("new", "n"), ("dismiss", "x"), ("quit", "q"), ("next", "j"), ("previous", "k"), ("goto", "g")] {
+        let chord = keymap.actions().into_iter().find(|(action, _)| *action == name).expect("a binding").1;
+        assert_eq!(chord.label(), expected, "{name}");
+    }
+}
+
+#[test]
+fn a_key_after_the_prefix_names_its_action() {
+    let keymap = Keymap::default();
+    assert_eq!(keymap.action_for(&press(KeyCode::Char('1'), KeyModifiers::NONE)), Some("sidebar"));
+    assert_eq!(keymap.action_for(&press(KeyCode::Char('?'), KeyModifiers::NONE)), Some("settings"));
+    assert_eq!(keymap.action_for(&press(KeyCode::Char('n'), KeyModifiers::NONE)), Some("new"));
+}
+
+#[test]
+fn a_key_that_means_nothing_names_no_action() {
+    // The caller cancels on None rather than passing it on, so half a mistyped
+    // gesture cannot land in a conversation.
+    assert!(Keymap::default().action_for(&press(KeyCode::Char('z'), KeyModifiers::NONE)).is_none());
+    assert!(Keymap::default().action_for(&press(KeyCode::Esc, KeyModifiers::NONE)).is_none());
+}
+
+#[test]
+fn the_old_chords_now_reach_the_agent() {
+    // ctrl+t, ctrl+n and ctrl+p used to be atrium's. An agent gets them back,
+    // which is the whole point of the prefix.
+    let keymap = Keymap::default();
+    for c in ['t', 'n', 'p', 'x', 'g', 'o', 's', 'q'] {
+        let event = press(KeyCode::Char(c), KeyModifiers::CONTROL);
+        assert!(!keymap.action.matches(&event), "ctrl+{c} should reach the agent");
+    }
+}
+
+#[test]
+fn the_gesture_reads_as_both_keys() {
+    let keymap = Keymap::default();
+    assert_eq!(keymap.gesture(keymap.sidebar), "ctrl+a 1");
+    assert_eq!(keymap.gesture(keymap.settings), "ctrl+a ?");
 }

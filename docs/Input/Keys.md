@@ -1,46 +1,59 @@
 # Keys
 
-Everything you type goes to the focused agent, except these eight. **Actions
-fire directly — there is no leader to press first.**
+**Everything you type reaches the focused agent.** atrium's own actions sit
+behind one prefix, `ctrl+a`, which is guitar's action mode.
 
-| Chord | Action |
+| Gesture | Action |
 | --- | --- |
-| `ctrl+t` | hold a new agent |
-| `ctrl+x` | close this one; closing the last goes back to the [[Splash]] |
-| `ctrl+n` / `ctrl+p` | next / previous |
-| `ctrl+g` | go to, where `1`…`9` jump straight to a row |
-| `ctrl+o` | show or hide the [[Sidebar]] |
-| `ctrl+s` | [[Settings]] |
-| `ctrl+q` | quit |
+| `ctrl+a` `n` | hold a new agent |
+| `ctrl+a` `x` | close this one; closing the last goes back to the [[Splash]] |
+| `ctrl+a` `j` / `k` | next / previous |
+| `ctrl+a` `g` | go to, where `1`…`9` jump straight to a row |
+| `ctrl+a` `1` | show or hide the [[Sidebar]] |
+| `ctrl+a` `?` | [[Settings]] |
+| `ctrl+a` `q` | quit |
 
-All eight are rebindable — see [[Configuration]].
+The prefix and all eight keys are rebindable — see [[Configuration]], where the
+prefix is the `action` entry.
 
-## Why these
+## Press it twice inside tmux
 
-No leader means every binding is a key **taken from the agent**, which makes the
-choice of defaults the whole design. `ctrl+letter` is a crowded space, and
-anything atrium claims the agent never sees. So the defaults are picked for what
-they cost, not for the mnemonic:
+`ctrl+a` is tmux's prefix here, so the first one never leaves tmux. The second
+does, because the config carries `bind C-a send-prefix`. That is already how
+guitar's action mode is driven on this machine, so the gesture is not a new one
+to learn.
 
-- **`ctrl+q`, `ctrl+s`** — XON and XOFF. Raw mode has already turned flow
-  control off, so neither can freeze anything.
-- **`ctrl+n`, `ctrl+p`** — shell history, which Claude's own input box does not
-  use; it uses the arrows.
-- **`ctrl+t`** — readline's transpose.
-- **`ctrl+g`** — aborts a readline entry, rarely asked for on purpose.
-- **`ctrl+o`** — readline's operate-and-get-next, which nothing asks for.
-- **`ctrl+x`** — a two-key readline prefix, and an agent's input box implements
-  no second key to follow it.
+## Why a prefix, and why this one
 
-**Deliberately untouched**, so the agent keeps them: `ctrl+c`, `ctrl+d`,
-`ctrl+z`, `ctrl+v`, `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+a`, `ctrl+e`,
-`ctrl+k`, and `ctrl+[` which is Escape. A test asserts no default lands on one
-of them.
+atrium used to fire eight `ctrl+letter` chords directly. That meant eight keys
+an agent could never see, and the choice of defaults was the whole design:
+`ctrl+t` cost readline's transpose, `ctrl+n`/`ctrl+p` cost shell history,
+`ctrl+x` cost a two-key prefix, and so on. **They are all the agent's again.**
 
-Nothing above atrium contends for these either: sway is `Super+…`, ghostty is
-`ctrl+shift+…`, and tmux claims `C-a` plus thirteen prefix-less `M-` bindings —
-no plain `ctrl+letter` among them. The one to avoid is `ctrl+a`, which tmux
-takes as its prefix and atrium would therefore never receive.
+What is left is one key. `ctrl+a` costs readline's start-of-line — and inside
+tmux it costs nothing at all, because tmux was already taking it and the agent
+never saw it. The keys behind the prefix are bare letters and cost nothing
+either: they mean something only in the moment after it.
+
+The letters are guitar's wherever guitar has one, so the two tools do not
+disagree: `1` toggles a pane, `?` is settings, `x` drops a thing, `q` exits,
+`j`/`k` walk a list.
+
+A test asserts exactly one chord is claimed, that every action key is
+unmodified, and that the claimed one is none of `ctrl+c`, `ctrl+d`, `ctrl+z`,
+`ctrl+v`, `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+e`, `ctrl+k` or
+`ctrl+[`, which is Escape.
+
+## A key that means nothing cancels
+
+Press the prefix and then something unbound and nothing happens — the key is
+swallowed rather than passed on. Half a mistyped gesture landing in a
+conversation is worse than nothing happening. The [[Stage|status line]] shows
+`ctrl+a` while atrium waits for the second key, since that is the only moment a
+keystroke means something other than itself.
+
+Nothing above atrium contends for the prefix: sway is `Super+…`, ghostty is
+`ctrl+shift+…`, and tmux's own `C-a` is the one being deliberately shared.
 
 ## A binding also has to be deliverable
 

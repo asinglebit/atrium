@@ -41,7 +41,7 @@ fn entries_carry_the_chord_that_does_the_same_thing() {
     let menu = Menu::general((0, 0), None, &keymap());
     let quit = menu.items.iter().find(|item| item.action == Action::Quit).expect("a quit entry");
 
-    assert_eq!(quit.chord, keymap().quit.label());
+    assert_eq!(quit.chord, keymap().gesture(keymap().quit), "the menu shows the whole gesture, not just the second key");
 }
 
 #[test]

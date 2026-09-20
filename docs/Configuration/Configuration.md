@@ -24,14 +24,15 @@ All of it optional:
 name = "one dark warmer"   # any of the 47 preset names
 
 [keys]
-quit = "ctrl+q"
-goto = "ctrl+g"
-settings = "ctrl+s"
-sidebar = "ctrl+o"
-new = "ctrl+t"
-dismiss = "ctrl+x"
-next = "ctrl+n"
-previous = "ctrl+p"
+action = "ctrl+a"
+quit = "q"
+goto = "g"
+settings = "?"
+sidebar = "1"
+new = "n"
+dismiss = "x"
+next = "j"
+previous = "k"
 ```
 
 See [[Keys]] for how a chord is written, and for the constraint that a binding

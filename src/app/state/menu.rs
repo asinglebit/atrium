@@ -63,7 +63,8 @@ impl Menu {
     /// The entries for a right-click on an agent's row: what can be done to
     /// that agent, then what can be done regardless.
     pub fn for_agent(at: (u16, u16), index: usize, name: &str, keymap: &Keymap) -> Self {
-        let mut items = vec![Item::bare(&format!("go to {name}"), Action::Focus(index)), Item::new(&format!("close {name}"), keymap.dismiss.label(), Action::Dismiss(index)), Item::separator()];
+        let mut items =
+            vec![Item::bare(&format!("go to {name}"), Action::Focus(index)), Item::new(&format!("close {name}"), keymap.gesture(keymap.dismiss), Action::Dismiss(index)), Item::separator()];
         items.extend(common(keymap));
         Self::new(at, items)
     }
@@ -73,7 +74,7 @@ impl Menu {
     pub fn general(at: (u16, u16), focused: Option<(usize, &str)>, keymap: &Keymap) -> Self {
         let mut items = Vec::new();
         if let Some((index, name)) = focused {
-            items.push(Item::new(&format!("close {name}"), keymap.dismiss.label(), Action::Dismiss(index)));
+            items.push(Item::new(&format!("close {name}"), keymap.gesture(keymap.dismiss), Action::Dismiss(index)));
             items.push(Item::separator());
         }
         items.extend(common(keymap));
@@ -160,11 +161,11 @@ impl Menu {
 /// The entries every menu ends with, whatever was clicked.
 fn common(keymap: &Keymap) -> Vec<Item> {
     vec![
-        Item::new("new agent", keymap.new.label(), Action::New),
-        Item::new("show / hide sidebar", keymap.sidebar.label(), Action::Sidebar),
-        Item::new("settings", keymap.settings.label(), Action::Settings),
+        Item::new("new agent", keymap.gesture(keymap.new), Action::New),
+        Item::new("show / hide sidebar", keymap.gesture(keymap.sidebar), Action::Sidebar),
+        Item::new("settings", keymap.gesture(keymap.settings), Action::Settings),
         Item::separator(),
-        Item::new("quit", keymap.quit.label(), Action::Quit),
+        Item::new("quit", keymap.gesture(keymap.quit), Action::Quit),
     ]
 }
 
