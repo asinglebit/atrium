@@ -223,7 +223,7 @@ profile — `--check-config` and `ctrl+space` `?` → profiles both say what was
 found and where. Inside `ctrl+space` `n`, `tab` cycles the lot.
 
 Themes are easier picked than typed: `ctrl+space` `?` opens settings, where the themes
-tab lists all thirty and Enter applies one. Individual colours are **not** set
+tab lists all sixty and Enter applies one. Individual colours are **not** set
 in `config.toml`: they live in `theme.json`. **The agents wear it too**: claude
 and opencode are both told, and a claude already running follows the change
 without being restarted.

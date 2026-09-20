@@ -41,7 +41,7 @@ is why the defaults are opinionated and the scope stops where that work stops.
 ### Configuration
 
 - [[Configuration]] — the three files, and which of them you write
-- [[Themes]] — 47 presets, shared with guitar
+- [[Themes]] — 60 presets, shared with guitar
 
 ### Internals
 

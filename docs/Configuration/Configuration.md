@@ -21,7 +21,7 @@ All of it optional:
 
 ```toml
 [theme]
-name = "one dark warmer"   # any of the 47 preset names
+name = "one dark warmer"   # any of the 60 preset names
 
 [keys]
 action = "ctrl+space"

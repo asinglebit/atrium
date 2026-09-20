@@ -1,6 +1,6 @@
 # Themes
 
-47 presets, shared with guitar. `src/helpers/palette.rs` is guitar's file with
+60 presets, shared with guitar. `src/helpers/palette.rs` is guitar's file with
 two functions changed.
 
 ## Reading, and the fallback to guitar
@@ -20,7 +20,7 @@ So the fallback is one-way: atrium will follow guitar, but never edit it.
 ## Picking one
 
 Themes are easier picked than typed. `ctrl+space` `?` opens [[Settings]], where the
-themes tab lists all 47 and `enter` applies one. `config.toml` takes a preset
+themes tab lists all 60 and `enter` applies one. `config.toml` takes a preset
 **name**; individual colours are not set there, they live in `theme.json`.
 
 ## The theme reaches the agents too
