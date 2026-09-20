@@ -15,11 +15,24 @@ Everything atrium does not claim for itself:
   bytes a terminal would have sent.
 - Pasted text, as a bracketed paste. Without bracketed paste enabled, a paste
   arrives at the agent as a burst of individual keystrokes.
-- Mouse events inside the stage, re-encoded with coordinates relative to the
-  stage's own corner — the agent asked the terminal for the mouse itself and has
-  no idea there is a sidebar beside it. See [[Mouse]].
+- Mouse events inside the stage, but **only when the agent asked the terminal
+  for the mouse** — re-encoded with coordinates relative to the stage's own
+  corner, since it has no idea there is a sidebar beside it. An agent that never
+  asked is sent none, and its wheel scrolls the history below instead. See
+  [[Mouse]].
 
 Input goes only to the focused agent, and only while it can still read it.
+
+## History
+
+The parser keeps 10 000 rows above the screen, and the wheel moves the view
+through them three rows a notch — the only way to read them, since the agent
+itself is drawing a live screen and has no scrollback of its own to offer.
+
+Drawing it takes nothing extra: `vt100` holds the offset and `tui-term` reads
+the screen through it, so scrolling back is a number rather than a second
+buffer. It is per agent, so each keeps its own place, and anything typed puts
+the live screen back.
 
 ## The background
 

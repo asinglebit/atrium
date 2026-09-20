@@ -43,6 +43,10 @@ use crate::{
 /// on a big repo never shows up as a stutter.
 const GIT_INTERVAL: Duration = Duration::from_secs(3);
 
+/// Rows of history one notch of the wheel moves, which is what a terminal
+/// scrolls for the same notch.
+const WHEEL_ROWS: usize = 3;
+
 pub struct App {
     registry: Registry,
     theme: Theme,
@@ -379,12 +383,35 @@ impl App {
             self.on_sidebar_mouse(mouse, sidebar);
             return Ok(());
         }
-        if within(layout.stage, at)
-            && let Some(bytes) = keys::encode_mouse(&mouse, (layout.stage.x, layout.stage.y))
-        {
-            return self.send_bytes(&bytes);
+        if within(layout.stage, at) {
+            return self.on_stage_mouse(mouse, layout.stage);
         }
         Ok(())
+    }
+
+    /// What the agent gets of a mouse event, which is what a terminal would
+    /// give it. A CLI that asked for the mouse is sent the report; one that
+    /// never did is sent nothing, and its wheel is atrium's to answer -- it
+    /// moves the view through the history the parser keeps above the screen,
+    /// which is the only way that history can be read at all.
+    fn on_stage_mouse(&mut self, mouse: MouseEvent, stage: Rect) -> io::Result<()> {
+        let Some(agent) = self.registry.focused() else {
+            return Ok(());
+        };
+
+        if !agent.session().wants_mouse() {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => agent.session().scroll_back(WHEEL_ROWS),
+                MouseEventKind::ScrollDown => agent.session().scroll_forward(WHEEL_ROWS),
+                _ => {},
+            }
+            return Ok(());
+        }
+
+        let Some(bytes) = keys::encode_mouse(&mouse, (stage.x, stage.y)) else {
+            return Ok(());
+        };
+        self.send_bytes(&bytes)
     }
 
     fn on_sidebar_mouse(&mut self, mouse: MouseEvent, area: Rect) {
@@ -856,7 +883,12 @@ impl App {
     /// Input goes only to the focused agent, and only while it can still read it.
     fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
         match self.registry.focused_mut() {
-            Some(agent) if !agent.has_exited() => agent.write(bytes),
+            Some(agent) if !agent.has_exited() => {
+                // Anything sent puts the live screen back in view, the way a
+                // terminal drops you to the bottom the moment you type.
+                agent.session().show_live();
+                agent.write(bytes)
+            },
             _ => Ok(()),
         }
     }

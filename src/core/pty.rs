@@ -69,6 +69,39 @@ impl PtySession {
         &self.parser
     }
 
+    /// Whether the child asked the terminal for the mouse. One that never did
+    /// is sent no reports: a real terminal sends it none either, and the bytes
+    /// would arrive in its input as text.
+    pub fn wants_mouse(&self) -> bool {
+        self.parser.lock().is_ok_and(|parser| parser.screen().mouse_protocol_mode() != vt100::MouseProtocolMode::None)
+    }
+
+    /// Moves the view that many rows up into the history kept above the
+    /// screen. The parser holds the offset and clamps it, so scrolling past the
+    /// oldest line it kept stops there.
+    pub fn scroll_back(&self, rows: usize) {
+        self.scroll_to(|at| at.saturating_add(rows));
+    }
+
+    /// Moves it back down towards the live screen.
+    pub fn scroll_forward(&self, rows: usize) {
+        self.scroll_to(|at| at.saturating_sub(rows));
+    }
+
+    /// Puts the live screen back in view, which is where a terminal jumps the
+    /// moment you type.
+    pub fn show_live(&self) {
+        self.scroll_to(|_| 0);
+    }
+
+    fn scroll_to(&self, where_to: impl FnOnce(usize) -> usize) {
+        if let Ok(mut parser) = self.parser.lock() {
+            let screen = parser.screen_mut();
+            let at = screen.scrollback();
+            screen.set_scrollback(where_to(at));
+        }
+    }
+
     pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
         self.writer.write_all(bytes)?;
         self.writer.flush()

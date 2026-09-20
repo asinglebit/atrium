@@ -85,8 +85,10 @@ directly — there is no leader to press first:
 The mouse works too. Click a row to put it on the stage, wheel to scroll, and
 drag the line between the panes to resize the sidebar — the width is remembered.
 **Right-click anywhere for a menu**: on a row it offers that agent, anywhere
-else it offers the rest. Inside the agent every other mouse event is forwarded
-on, so the agent's own mouse support keeps working.
+else it offers the rest. Inside the agent the wheel scrolls back through its
+history, and every other mouse event is forwarded on to an agent that asked the
+terminal for the mouse — which is also what decides whether the wheel is
+atrium's to answer or the agent's.
 
 ## Config
 
@@ -310,6 +312,19 @@ right-click, so before this there was no way to reach an action with the mouse �
 and none at all once the sidebar was hidden. On a row the menu offers that
 agent by name; anywhere else it offers what can be done regardless. It quotes
 the chord beside each entry, so it doubles as the place the keys are learnt.
+
+**The wheel scrolls the agent's history, because nothing else can reach it.**
+Every mouse event inside the stage used to be re-encoded and handed to the
+agent, which is only right for an agent that asked the terminal for the mouse.
+`claude` never does — it enables bracketed paste, hides the cursor and leaves
+the mouse alone — so the reports arrived in its input as text, and the 10 000
+rows the parser keeps above its screen could not be read at all. What reaches an
+agent now is what a terminal would give it: reports only if it asked for them,
+and otherwise the wheel moves the view through that history, three rows a notch,
+with anything typed putting the live screen back the way a terminal drops you to
+the bottom when you type. A full-screen agent has no history above its screen,
+so its wheel still does nothing unless it asked for the mouse, which is the same
+trade a terminal makes.
 
 **The wordmark lightens at the top, and changes size on guitar's breakpoints
 rather than on the widths the art needs.** The top 30% take `COLOR_PINK` and the
