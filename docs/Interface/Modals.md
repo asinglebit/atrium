@@ -3,7 +3,7 @@
 Only one is ever up, and while it is, it owns the keyboard: nothing reaches the
 agent, so a stray keystroke cannot land in a conversation you cannot see.
 
-## New agent — `ctrl+t`
+## New agent — `ctrl+space` `n`
 
 Pick a project, pick a profile.
 
@@ -30,15 +30,15 @@ anything the reader needs.
 
 See [[Projects]] for where the list comes from.
 
-## Go to — `ctrl+g`
+## Go to — `ctrl+space` `space`
 
 A numbered list of what is held.
 
-- A **digit** jumps straight to that row. Rows are numbered from one, so `0`
-  never names anything, and a number that is not there is ignored.
-- `j`/`k` and the arrows move for when a row has scrolled past nine, `enter`
-  goes, `esc` closes.
+- A **digit** jumps straight to that row, numbered from one with `0` for the
+  tenth — the same numbers the prefix uses. One that is not there is ignored.
+- `j`/`k`, `ctrl+j`/`ctrl+k` and the arrows move for when a row has scrolled
+  past the tenth, `enter` goes, `esc` closes.
 
-This modal exists because `ctrl+1`..`ctrl+9` cannot be bound at all — see
-[[Keys]]. Inside a modal the keyboard is atrium's, so a plain digit means what
-it says.
+`ctrl+space` `1`…`0` reaches the first ten without opening this at all, so what
+the list is for is seeing them, and reaching the ones a single key cannot.
+Inside a modal the keyboard is atrium's, so a plain digit means what it says.

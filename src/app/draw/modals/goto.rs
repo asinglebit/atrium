@@ -36,7 +36,7 @@ pub fn draw(frame: &mut Frame, full: Rect, goto: &Goto, registry: &Registry, the
     let items = pane::zebra_list_items(lines, list_area.height as usize, goto.selected(), true, theme);
     frame.render_widget(List::new(items), list_area);
 
-    frame.render_widget(Paragraph::new(Line::from(Span::styled("1-9 jump · j/k move · enter pick · esc cancel", Style::default().fg(theme.COLOR_GREY_600)))), footer);
+    frame.render_widget(Paragraph::new(Line::from(Span::styled("1-0 jump · j/k move · enter pick · esc cancel", Style::default().fg(theme.COLOR_GREY_600)))), footer);
 }
 
 #[cfg(test)]

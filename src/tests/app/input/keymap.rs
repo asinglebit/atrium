@@ -123,18 +123,18 @@ fn atrium_takes_one_chord_and_not_a_key_more() {
 #[test]
 fn the_keys_behind_the_prefix_cost_the_agent_nothing() {
     // They mean something only after the prefix, so a bare letter here is not
-    // a letter taken away from anyone.
+    // a letter taken away from anyone. shift is allowed -- a shifted key is
+    // still one you type -- but ctrl and alt are what an agent wants back.
     for (name, chord) in Keymap::default().actions() {
-        assert!(chord.modifiers.is_empty(), "{name} is {}, which would be claimed outright", chord.label());
+        assert!(!chord.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT), "{name} is {}, which would be claimed outright", chord.label());
     }
 }
 
 #[test]
 fn the_prefix_is_the_one_readline_key_given_up() {
     // ctrl+[ is Escape, and the rest are signals or readline editing that a
-    // shell or an agent would miss immediately. ctrl+a -- start of line -- is
-    // the single exception, and a deliberate one: it is guitar's action key,
-    // and inside tmux it is the prefix anyway, so an agent there never had it.
+    // shell or an agent would miss immediately. ctrl+space costs readline's
+    // set-mark and nothing else, which is the cheapest key there was to take.
     const RESERVED: [char; 11] = ['c', 'd', 'z', 'v', 'l', 'r', 'u', 'w', 'e', 'k', '['];
 
     for chord in Keymap::default().claimed() {
@@ -146,14 +146,15 @@ fn the_prefix_is_the_one_readline_key_given_up() {
 
 #[test]
 fn no_default_is_a_chord_a_terminal_cannot_deliver() {
-    // The legacy encoding has a byte for ctrl plus a letter and for very little
-    // else: ctrl+] arrives as ctrl+5, and ctrl+1 as a bare 1. A default bound to
+    // The legacy encoding has a byte for ctrl plus a letter, one for ctrl+space
+    // -- NUL, which crossterm reports as itself -- and for very little else:
+    // ctrl+] arrives as ctrl+5, and ctrl+1 as a bare 1. A default bound to
     // either could never fire, which is exactly what ctrl+] did here.
     for chord in Keymap::default().claimed() {
         if chord.modifiers.contains(KeyModifiers::CONTROL)
             && let KeyCode::Char(c) = chord.code
         {
-            assert!(c.is_ascii_alphabetic(), "ctrl+{c} never reaches an application as itself");
+            assert!(c.is_ascii_alphabetic() || c == ' ', "ctrl+{c} never reaches an application as itself");
         }
     }
 }
@@ -193,14 +194,16 @@ fn setting_a_known_action_takes_and_an_unknown_one_does_not() {
 }
 
 #[test]
-fn the_prefix_is_guitars() {
-    assert_eq!(Keymap::default().action.label(), "ctrl+a");
+fn the_prefix_is_the_one_nothing_above_atrium_wants() {
+    // tmux's prefix here is C-a, so ctrl+space reaches atrium on the first
+    // press rather than having to be sent through with a second one.
+    assert_eq!(Keymap::default().action.label(), "ctrl+space");
 }
 
 #[test]
 fn the_defaults_are_the_ones_asked_for() {
     let keymap = Keymap::default();
-    for (name, expected) in [("sidebar", "1"), ("settings", "?"), ("new", "n"), ("dismiss", "x"), ("quit", "q"), ("next", "j"), ("previous", "k"), ("goto", "g")] {
+    for (name, expected) in [("sidebar", "shift+1"), ("settings", "?"), ("new", "n"), ("dismiss", "x"), ("quit", "q"), ("next", "j"), ("previous", "k"), ("goto", "space")] {
         let chord = keymap.actions().into_iter().find(|(action, _)| *action == name).expect("a binding").1;
         assert_eq!(chord.label(), expected, "{name}");
     }
@@ -209,9 +212,13 @@ fn the_defaults_are_the_ones_asked_for() {
 #[test]
 fn a_key_after_the_prefix_names_its_action() {
     let keymap = Keymap::default();
-    assert_eq!(keymap.action_for(&press(KeyCode::Char('1'), KeyModifiers::NONE)), Some("sidebar"));
+    assert_eq!(keymap.action_for(&press(KeyCode::Char('!'), KeyModifiers::NONE)), Some("sidebar"));
+    assert_eq!(keymap.action_for(&press(KeyCode::Char(' '), KeyModifiers::NONE)), Some("goto"));
     assert_eq!(keymap.action_for(&press(KeyCode::Char('?'), KeyModifiers::NONE)), Some("settings"));
     assert_eq!(keymap.action_for(&press(KeyCode::Char('n'), KeyModifiers::NONE)), Some("new"));
+    // A bare digit is an agent rather than an action; the caller asks for that
+    // next, which is what keeps a digit someone has bound to an action theirs.
+    assert_eq!(keymap.action_for(&press(KeyCode::Char('1'), KeyModifiers::NONE)), None);
 }
 
 #[test]
@@ -236,6 +243,54 @@ fn the_old_chords_now_reach_the_agent() {
 #[test]
 fn the_gesture_reads_as_both_keys() {
     let keymap = Keymap::default();
-    assert_eq!(keymap.gesture(keymap.sidebar), "ctrl+a 1");
-    assert_eq!(keymap.gesture(keymap.settings), "ctrl+a ?");
+    assert_eq!(keymap.gesture(keymap.sidebar), "ctrl+space shift+1");
+    assert_eq!(keymap.gesture(keymap.goto), "ctrl+space space");
+    assert_eq!(keymap.gesture(keymap.settings), "ctrl+space ?");
+}
+
+#[test]
+fn a_shifted_digit_matches_the_character_the_terminal_sends() {
+    // There is no SHIFT flag to read in the legacy encoding: shift+1 arrives
+    // as `!` and nothing else, so that is what the chord has to match.
+    let bound = chord("shift+1");
+    assert!(bound.matches(&press(KeyCode::Char('!'), KeyModifiers::NONE)));
+    assert!(bound.matches(&press(KeyCode::Char('1'), KeyModifiers::SHIFT)));
+    assert!(!bound.matches(&press(KeyCode::Char('1'), KeyModifiers::NONE)), "a bare digit names an agent, not the sidebar");
+}
+
+#[test]
+fn a_shifted_digit_can_be_written_either_way() {
+    let typed = press(KeyCode::Char('!'), KeyModifiers::NONE);
+    assert!(chord("!").matches(&typed), "the character a terminal sends");
+    assert!(chord("shift+1").matches(&typed), "the key you actually press");
+}
+
+#[test]
+fn a_digit_names_the_agent_on_that_row() {
+    assert_eq!(agent_for(&press(KeyCode::Char('1'), KeyModifiers::NONE)), Some(0));
+    assert_eq!(agent_for(&press(KeyCode::Char('9'), KeyModifiers::NONE)), Some(8));
+    assert_eq!(agent_for(&press(KeyCode::Char('0'), KeyModifiers::NONE)), Some(9), "zero is the tenth row, not the first");
+}
+
+#[test]
+fn a_digit_that_is_not_bare_names_no_agent() {
+    // shift+1 is the sidebar, and ctrl+1 is not a key a terminal can send.
+    assert_eq!(agent_for(&press(KeyCode::Char('!'), KeyModifiers::NONE)), None);
+    assert_eq!(agent_for(&press(KeyCode::Char('1'), KeyModifiers::CONTROL)), None);
+    assert_eq!(agent_for(&press(KeyCode::Char('n'), KeyModifiers::NONE)), None);
+}
+
+#[test]
+fn ctrl_j_and_ctrl_k_walk_a_list() {
+    assert_eq!(as_arrow(press(KeyCode::Char('j'), KeyModifiers::CONTROL)).code, KeyCode::Down);
+    assert_eq!(as_arrow(press(KeyCode::Char('k'), KeyModifiers::CONTROL)).code, KeyCode::Up);
+}
+
+#[test]
+fn everything_else_reaches_the_list_as_itself() {
+    // A bare letter is text being typed in the boxes that take text, so only
+    // the ctrl pair is turned into anything.
+    for key in [press(KeyCode::Char('j'), KeyModifiers::NONE), press(KeyCode::Char('k'), KeyModifiers::NONE), press(KeyCode::Char('x'), KeyModifiers::CONTROL)] {
+        assert_eq!(as_arrow(key).code, key.code);
+    }
 }

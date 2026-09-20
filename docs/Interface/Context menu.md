@@ -4,16 +4,16 @@
 `src/app/draw/menu.rs` draws it.
 
 ```
-╭─────────────────────────────────╮
-│ go to guitar                    │
-│ close guitar            ctrl+x  │
-│ ─────────────────────────────── │
-│ new agent               ctrl+t  │
-│ show / hide sidebar     ctrl+o  │
-│ settings                ctrl+s  │
-│ ─────────────────────────────── │
-│ quit                    ctrl+q  │
-╰─────────────────────────────────╯
+╭───────────────────────────────────────────╮
+│ go to guitar                              │
+│ close guitar                ctrl+space x  │
+│ ───────────────────────────────────────── │
+│ new agent                   ctrl+space n  │
+│ show / hide sidebar   ctrl+space shift+1  │
+│ settings                    ctrl+space ?  │
+│ ───────────────────────────────────────── │
+│ quit                        ctrl+space q  │
+╰───────────────────────────────────────────╯
 ```
 
 ## Why right-click

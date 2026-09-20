@@ -13,12 +13,28 @@ pub struct Chord {
 /// Terminals disagree about whether a shifted letter arrives uppercase or as a
 /// SHIFT flag, so both sides are settled on lowercase-plus-flag before they are
 /// compared. Modifiers beyond these three never reach a terminal application.
+///
+/// A shifted digit is settled the same way. There is no SHIFT flag to read: the
+/// terminal sends `!`, so `!` and `shift+1` are made into the one chord, and
+/// either can be written in the config file.
 fn normalise(code: KeyCode, modifiers: KeyModifiers) -> (KeyCode, KeyModifiers) {
     let modifiers = modifiers & (KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT);
     match code {
         KeyCode::Char(c) if c.is_uppercase() => (KeyCode::Char(c.to_ascii_lowercase()), modifiers | KeyModifiers::SHIFT),
+        KeyCode::Char(c) => match unshift_digit(c) {
+            Some(digit) => (KeyCode::Char(digit), modifiers | KeyModifiers::SHIFT),
+            None => (code, modifiers),
+        },
         _ => (code, modifiers),
     }
+}
+
+/// The digit a shifted-digit character is typed on. US layout, which is the one
+/// the defaults are written for; on another, the key still works, it is just
+/// named after the wrong digit.
+fn unshift_digit(c: char) -> Option<char> {
+    let index = "!@#$%^&*()".find(c)?;
+    "1234567890".chars().nth(index)
 }
 
 impl Chord {
@@ -74,12 +90,13 @@ fn key_name(code: KeyCode) -> String {
 /// guitar's action mode, for the same reason: the keys worth having are the
 /// ones the thing underneath is not already using.
 ///
-/// `ctrl+a` is tmux's prefix, so inside tmux it is pressed twice -- the second
-/// one arrives here because `bind C-a send-prefix` passes it through. That is
-/// how guitar is already driven on this machine.
+/// `ctrl+space` is nobody else's here: tmux's prefix is `C-a`, so it passes
+/// straight through rather than having to be pressed twice.
 ///
-/// The letters are guitar's where guitar has one: `1` toggles a pane, `?` is
-/// settings, `x` drops a thing, `q` exits, and `j`/`k` walk a list.
+/// The digits name the rows, so `1` is the first agent and `0` the tenth. That
+/// is what moves `1` off the sidebar and onto `shift+1`. The rest are guitar's
+/// where guitar has one: `?` is settings, `x` drops a thing, `q` exits, and
+/// `j`/`k` walk a list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Keymap {
     /// The one chord atrium takes from the agent. Everything else follows it.
@@ -102,9 +119,13 @@ fn key(c: char) -> Chord {
     Chord::plain(KeyCode::Char(c))
 }
 
+fn shift(c: char) -> Chord {
+    Chord { code: KeyCode::Char(c), modifiers: KeyModifiers::SHIFT }
+}
+
 impl Default for Keymap {
     fn default() -> Self {
-        Self { action: ctrl('a'), quit: key('q'), goto: key('g'), settings: key('?'), sidebar: key('1'), new: key('n'), dismiss: key('x'), next: key('j'), previous: key('k') }
+        Self { action: ctrl(' '), quit: key('q'), goto: key(' '), settings: key('?'), sidebar: shift('1'), new: key('n'), dismiss: key('x'), next: key('j'), previous: key('k') }
     }
 }
 
@@ -154,6 +175,39 @@ impl Keymap {
     /// The action this key runs, once the prefix has been pressed.
     pub fn action_for(&self, key: &KeyEvent) -> Option<&'static str> {
         self.actions().into_iter().find(|(_, chord)| chord.matches(key)).map(|(name, _)| name)
+    }
+}
+
+/// ctrl+j and ctrl+k as the arrows they stand for, so a list can be walked
+/// without leaving the home row and without the letter being taken for text.
+/// Only ever called where atrium is taking the keys rather than the agent.
+pub fn as_arrow(key: KeyEvent) -> KeyEvent {
+    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+        return key;
+    }
+    match key.code {
+        KeyCode::Char('j') => KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        KeyCode::Char('k') => KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+        _ => key,
+    }
+}
+
+/// The row a digit names, counting from one, with `0` for the tenth. Ten keys
+/// is as far as one keystroke goes, and it is as far as the rows are numbered.
+pub fn row_for_digit(digit: char) -> Option<usize> {
+    match digit.to_digit(10)? as usize {
+        0 => Some(9),
+        n => Some(n - 1),
+    }
+}
+
+/// The agent a key names, once the prefix has been pressed. Not rebindable:
+/// these are the numbers written down the sidebar, and they are what they are.
+pub fn agent_for(key: &KeyEvent) -> Option<usize> {
+    let (code, modifiers) = normalise(key.code, key.modifiers);
+    match code {
+        KeyCode::Char(c) if modifiers.is_empty() => row_for_digit(c),
+        _ => None,
     }
 }
 

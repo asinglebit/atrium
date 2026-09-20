@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::state::splash::Splash,
+    app::{input::keymap::Keymap, state::splash::Splash},
     core::profile::{KNOWN_PROGRAMS, Profile},
     helpers::{logo, palette::Theme, text::truncate_with_ellipsis},
 };
@@ -21,7 +21,11 @@ const SELECTED_RIGHT: &str = " ⏴";
 /// launch one as.
 const HEADING: &str = "harnesses";
 
-const HINT: &str = "actions: enter holds one here | ctrl+t pick a project | ctrl+s settings";
+/// What to press, taken from the keymap rather than written down, so rebinding
+/// a key changes what the splash says it is.
+fn hint(keymap: &Keymap) -> String {
+    format!("enter holds one here | {} pick a project | {} settings", keymap.gesture(keymap.new), keymap.gesture(keymap.settings))
+}
 
 /// Everything above the list: the wordmark, a blank, the heading, a blank, the
 /// hint, a blank, and the failure line when there is one.
@@ -43,7 +47,7 @@ pub fn first_row(area: Rect, splash: &Splash, count: usize) -> u16 {
 /// What atrium shows when it is holding nothing: the wordmark, and what it
 /// could hold. Guitar's splash, with the recent repositories replaced by the
 /// profiles -- see `Profiles` in the docs.
-pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile], theme: &Theme) {
+pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile], theme: &Theme, keymap: &Keymap) {
     let rows = logo::splash_rows_for(area.width as usize);
     // An empty list is still one row: the line saying there is nothing to hold.
     let mut lines: Vec<Line> = (0..padding(area, splash, profiles.len().max(1))).map(|_| Line::default()).collect();
@@ -56,7 +60,7 @@ pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile]
     lines.push(Line::default());
     lines.push(Line::from(Span::styled(HEADING, Style::default().fg(theme.COLOR_TEXT))).centered());
     lines.push(Line::default());
-    lines.push(Line::from(Span::styled(truncate_with_ellipsis(HINT, area.width as usize), Style::default().fg(theme.COLOR_GREY_600))).centered());
+    lines.push(Line::from(Span::styled(truncate_with_ellipsis(&hint(keymap), area.width as usize), Style::default().fg(theme.COLOR_GREY_600))).centered());
     lines.push(Line::default());
 
     // A failed launch stays on the splash so another choice can be made.

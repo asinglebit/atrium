@@ -75,26 +75,30 @@ hold — the harnesses from `profiles.json`, plus every CLI it knows and finds
 directory you started in. Given `--profile` or a command, it skips the splash and
 holds that, because you already said.
 
-The sidebar starts hidden; `ctrl+o` brings it in.
+The sidebar starts hidden; `ctrl+space` `shift+1` brings it in.
 
 **Everything you type goes to the focused agent.** atrium's own actions sit
-behind `ctrl+a`, which is guitar's action mode and the only key atrium takes:
+behind `ctrl+space`, the only key atrium takes:
 
 | | |
 | --- | --- |
-| `ctrl+a` `n` | hold a new agent — pick a project, `tab` picks the profile |
-| `ctrl+a` `x` | close this one; closing the last goes back to the splash |
-| `ctrl+a` `j` / `k` | next / previous |
-| `ctrl+a` `g` | go to, where `1`…`9` jump straight to a row |
-| `ctrl+a` `1` | show or hide the sidebar |
-| `ctrl+a` `?` | settings |
-| `ctrl+a` `q` | quit |
+| `ctrl+space` `1`…`9` `0` | the agent on that row, `0` being the tenth |
+| `ctrl+space` `space` | go to, which is all of them as a list |
+| `ctrl+space` `n` | hold a new agent — pick a project, `tab` picks the profile |
+| `ctrl+space` `x` | close this one; closing the last goes back to the splash |
+| `ctrl+space` `j` / `k` | next / previous |
+| `ctrl+space` `shift+1` | show or hide the sidebar |
+| `ctrl+space` `?` | settings |
+| `ctrl+space` `q` | quit |
 
-Inside tmux, press it twice. `ctrl+a` is tmux's own prefix, and
-`bind C-a send-prefix` is what passes the second one through — which is how
-guitar is already driven here. A key that means nothing after the prefix
-cancels rather than reaching the agent, so half a mistyped gesture never lands
-in a conversation. The status line shows `ctrl+a` while it waits.
+The digits are the numbers written down the sidebar, which is why the sidebar
+moved to `shift+1`. Wherever a list or a dialog is up, `ctrl+j` and `ctrl+k`
+walk it — including the boxes where a bare letter is text being typed.
+
+tmux's prefix here is `C-a`, so `ctrl+space` passes straight through it and
+needs pressing only once. A key that means nothing after the prefix cancels
+rather than reaching the agent, so half a mistyped gesture never lands in a
+conversation. The status line shows `ctrl+space` while it waits.
 
 The mouse works too. Click a row to put it on the stage, wheel to scroll, and
 drag the line between the panes to resize the sidebar — the width is remembered.
@@ -176,30 +180,34 @@ the window's own panes rather than anything that polls.
 
 ```toml
 [theme]
-name = "one dark warmer"   # any of guitar's ~30 preset names
+name = "one dark warmer"   # any of guitar's preset names
 
 [keys]
-quit = "ctrl+q"            # any key or chord: "esc", "ctrl+y", "alt+enter"
-goto = "ctrl+g"
-settings = "ctrl+s"
-sidebar = "ctrl+o"
-new = "ctrl+t"
-dismiss = "ctrl+x"
-next = "ctrl+n"
-previous = "ctrl+p"
+action = "ctrl+space"      # the prefix: the one chord taken from the agent
+quit = "q"                 # any key or chord: "esc", "ctrl+y", "alt+enter"
+goto = "space"
+settings = "?"
+sidebar = "shift+1"        # or "!", which is the same keystroke
+new = "n"
+dismiss = "x"
+next = "j"
+previous = "k"
 ```
+
+The digits have no entry: `1`…`9` and `0` name the agent on that row, and are
+not rebindable.
 
 **Profiles are not in here.** A profile is a CLI plus what it needs to be
 launched with — for a Claude subscription, a `CLAUDE_CONFIG_DIR` and a flag or
-two. They are added, renamed and deleted in `ctrl+s` → profiles, and atrium
+two. They are added, renamed and deleted in `ctrl+space` `?` → profiles, and atrium
 keeps them in `profiles.json` of its own, because rewriting `config.toml` would
 lose your comments. `~` and `$VAR` are stored as you type them and expanded only
 on the way to an agent, so the file stays portable. Beside them you get whatever
 of `claude`, `opencode` and `codex` is on your `PATH` and not already named by a
-profile — `--check-config` and `ctrl+s` → profiles both say what was found and
-where. Inside `ctrl+t`, `tab` cycles the lot.
+profile — `--check-config` and `ctrl+space` `?` → profiles both say what was
+found and where. Inside `ctrl+space` `n`, `tab` cycles the lot.
 
-Themes are easier picked than typed: `ctrl+s` opens settings, where the themes
+Themes are easier picked than typed: `ctrl+space` `?` opens settings, where the themes
 tab lists all thirty and Enter applies one. Individual colours are **not** set
 in `config.toml`: they live in `theme.json`. **The agents wear it too**: claude
 and opencode are both told, and a claude already running follows the change
@@ -249,13 +257,13 @@ ever matters, the change is to split a server out behind the same sidebar.
 atrium used to fire eight `ctrl+letter` chords directly, which meant eight keys
 an agent could never see — `ctrl+t` for readline's transpose, `ctrl+n`/`ctrl+p`
 for shell history, `ctrl+x` for a two-key prefix, and so on. They are all the
-agent's again. What is left is `ctrl+a`, which costs readline's start-of-line,
-and costs nothing at all inside tmux, where it was the prefix and never reached
-the agent to begin with. The keys behind it are bare letters, so they cost
-nothing either: they mean something only after the prefix. A test asserts
-exactly one chord is claimed, that every action key is unmodified, and that the
-claimed one is not `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+l`, `ctrl+r`,
-`ctrl+u`, `ctrl+w`, `ctrl+e`, `ctrl+k` or `ctrl+[`.
+agent's again. What is left is `ctrl+space`, which costs readline's set-mark
+and nothing else — and nothing at all inside tmux, whose own prefix here is
+`C-a`, so it passes straight through. The keys behind it are bare ones, so they
+cost nothing either: they mean something only after the prefix. A test asserts
+exactly one chord is claimed, that no action key carries ctrl or alt, and that
+the claimed one is not `ctrl+c`, `ctrl+d`, `ctrl+z`, `ctrl+v`, `ctrl+l`,
+`ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+e`, `ctrl+k` or `ctrl+[`.
 
 **A default also has to be a chord a terminal can actually deliver, which is
 narrower than it looks.** `ctrl+]` was the default for closing an agent and
@@ -263,20 +271,24 @@ never once fired. atrium does not push the kitty keyboard flags, so it reads the
 legacy encoding, and there crossterm maps the bytes `0x1C`..`0x1F` onto
 `ctrl+4`..`ctrl+7` — `ctrl+]` is `0x1D`, so it arrives as `ctrl+5` and a chord
 written `ctrl+]` can never match. Outside a letter a terminal has a byte for
-almost nothing, which is the same fact behind `ctrl+1`..`ctrl+9` below. A test
-now asserts every default is a ctrl **letter**.
+almost nothing, which is the same fact behind `ctrl+1`..`ctrl+9` below. The one
+exception is `ctrl+space`, which arrives as NUL and is reported as itself — a
+test asserts every claimed default is a ctrl letter or exactly that. A shifted
+digit is the mirror of the problem: `shift+1` arrives as `!` with no flag to
+read, so the two are settled onto one chord before anything is compared.
 
 **Holding nothing is a state now, not the end.** atrium used to spawn an agent
 before it drew a frame, and closing the last one exited — which meant the only
 way to choose a harness was to have said so on the command line. It now opens
 on guitar's splash with the profiles where guitar lists recent repositories, and
-closing the last agent returns there rather than quitting. `ctrl+q` is how you
-leave. Nothing was lost: `--profile` and a named command still skip it, because
+closing the last agent returns there rather than quitting. `ctrl+space` `q` is
+how you leave. Nothing was lost: `--profile` and a named command still skip it, because
 both already said what they wanted.
 
 **The sidebar starts hidden.** One agent is the common case, and a sidebar
-listing one row says nothing the status line does not already say. `ctrl+o`
-brings it in, and the width it opens at is still the one you last dragged.
+listing one row says nothing the status line does not already say.
+`ctrl+space` `shift+1` brings it in, and the width it opens at is still the one
+you last dragged.
 
 **A subscription is an environment variable, so it is a profile rather than a
 special case.** `clw` and `clp` were shell aliases setting `CLAUDE_CONFIG_DIR`
@@ -424,8 +436,9 @@ commits to plot.
 
 Nothing above atrium contends for these: sway is `Super+…` only, ghostty is
 `ctrl+shift+…`, and tmux claims `C-a` plus thirteen prefix-less `M-` bindings —
-no plain `ctrl+letter` among them. The one to avoid is `ctrl+a`, which tmux
-takes as its prefix and atrium would therefore never receive.
+no plain `ctrl+letter` among them, and not `ctrl+space`, which is why the
+prefix is that. Watch for an IME on `ctrl+space`: ibus and fcitx take it to
+switch input language by default, and atrium would never see it.
 
 **Hooks go in through `--settings`, never `~/.claude/settings.json`.** Each
 agent is launched with its hooks passed on the command line, so a Claude started
@@ -513,12 +526,14 @@ separator and the scroll position. ratatui draws *nothing* for a scrollbar whose
 content length is zero, though, so a list that fits would lose the separator
 entirely — `draw_gutter` falls back to a plain bordered block in that case.
 
-**`ctrl+1`..`ctrl+9` is not a thing either, which is why there is a goto list.** A
-terminal has no legacy encoding for ctrl and a digit: `ctrl+1` arrives as a bare
-`1`, indistinguishable from typing it, and `ctrl+2` arrives as NUL. tmux ships
-`extended-keys off` and does not model the key for `send-keys` either. So the
-numbers on the rows are jumped to from inside `ctrl+g`, where the modal owns the
-keyboard and a plain digit means what it says.
+**`ctrl+1`..`ctrl+9` is not a thing either, which is why the digits sit behind
+the prefix.** A terminal has no legacy encoding for ctrl and a digit: `ctrl+1`
+arrives as a bare `1`, indistinguishable from typing it, and `ctrl+2` arrives as
+NUL. tmux ships `extended-keys off` and does not model the key for `send-keys`
+either. So `ctrl+space` `1`..`0` is what jumps to a row: after the prefix the
+keyboard is atrium's for exactly one keystroke, and a plain digit means what it
+says. The goto list is still there for the rows past the tenth, and for seeing
+them all at once.
 
 **Test files are attached with `#[path]`, which is a footgun with a guard.**
 Rewriting a source file without its `#[cfg(test)] mod tests;` block removes its

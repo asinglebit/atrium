@@ -50,16 +50,23 @@ PROFILES
     Inside the new-agent modal, `tab` cycles the lot, and the splash lists it.
 
 KEYS
-    Every key reaches the agent. atrium's own actions sit behind ctrl+a, the
-    way guitar's action mode does. Inside tmux press it twice: tmux takes the
-    first one, and `bind C-a send-prefix` passes the second through.
+    Every key reaches the agent. atrium's own actions sit behind ctrl+space,
+    the way guitar's sit behind ctrl+a. tmux's prefix here is C-a, so
+    ctrl+space passes straight through it rather than being pressed twice.
 
-    ctrl+a n  hold a new agent     ctrl+a j / k  next / previous
-    ctrl+a g  go to (1-9 jumps)    ctrl+a 1      show / hide the sidebar
-    ctrl+a x  close this one       ctrl+a ?      settings
-    ctrl+a q  quit
+    ctrl+space 1..0     the agent on that row, 0 being the tenth
+    ctrl+space space    go to, which is all of them as a list
+    ctrl+space n        hold a new agent
+    ctrl+space x        close this one
+    ctrl+space j / k    next / previous
+    ctrl+space shift+1  show / hide the sidebar
+    ctrl+space ?        settings
+    ctrl+space q        quit
 
-    A key that means nothing after ctrl+a cancels rather than reaching the
+    Wherever a list or a dialog is up, ctrl+j and ctrl+k walk it -- including
+    the boxes where a bare letter is text being typed.
+
+    A key that means nothing after ctrl+space cancels rather than reaching the
     agent, so half a mistyped gesture never lands in a conversation.
 
     The mouse works: click a row, wheel to scroll, drag the line between the
@@ -67,8 +74,8 @@ KEYS
     agent everything else is forwarded on, so the agent's own mouse support
     keeps working.
 
-    ctrl+a is the one key the agent no longer sees. It keeps everything else,
-    including ctrl+t, ctrl+n, ctrl+p, ctrl+x, ctrl+g, ctrl+o, ctrl+s and
+    ctrl+space is the one key the agent no longer sees. It keeps everything
+    else, including ctrl+t, ctrl+n, ctrl+p, ctrl+x, ctrl+g, ctrl+o, ctrl+s and
     ctrl+q, all of which atrium used to take.
 
 CONFIG";

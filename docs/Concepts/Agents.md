@@ -47,7 +47,7 @@ parser, which decides how the screen reflows.
 - Without the wait, a killed agent would sit as a zombie for as long as atrium
   runs.
 
-So dropping a session is what ends an agent, which is what makes `ctrl+x` (see
+So dropping a session is what ends an agent, which is what makes `ctrl+space` `x` (see
 [[Keys]]) and the menu's *close* entry actually close something.
 
 ## Agents die with atrium

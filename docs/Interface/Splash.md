@@ -16,7 +16,7 @@ X@BwP@  w@B  @+   @   @BBw@  w@   @   @
 
                       harnesses
 
-  actions: enter holds one here | ctrl+t pick a project | ctrl+s settings
+  enter holds one here | ctrl+space n pick a project | ctrl+space ? settings
 
                   ⏵ claude · work ⏴
                    claude · personal
@@ -26,23 +26,24 @@ X@BwP@  w@B  @+   @   @BBw@  w@   @   @
 ## When it appears
 
 - **`atrium`**, with nothing to go on. Nothing was asked for, so it asks.
-- **After the last agent closes.** `ctrl+x` on the only held agent returns here
-  rather than ending atrium — see [[Registry and focus]]. `ctrl+q` is how you
-  leave.
+- **After the last agent closes.** `ctrl+space` `x` on the only held agent
+  returns here rather than ending atrium — see [[Registry and focus]].
+  `ctrl+space` `q` is how you leave.
 
 `atrium --profile personal` and `atrium bash --norc` **skip it**: both already
 said what they wanted.
 
 ## Using it
 
-`j`/`k` and the arrows move, `enter` holds the selected harness **in the
+`j`/`k`, `ctrl+j`/`ctrl+k` and the arrows move, `enter` holds the selected
+harness **in the
 directory atrium was started in** — which is what a bare `atrium` used to do
 without asking. A click holds the row it landed on, because the list exists to
 be picked from and selecting then confirming would be two steps for one
 intention.
 
-The chords still work: `ctrl+t` opens the [[Modals|project picker]] instead,
-`ctrl+s` opens [[Settings]], `ctrl+q` quits.
+The gestures still work: `ctrl+space` `n` opens the [[Modals|project picker]]
+instead, `ctrl+space` `?` opens [[Settings]], `ctrl+space` `q` quits.
 
 A launch that fails — a profile whose program has been uninstalled since the
 scan — leaves its message above the list rather than taking atrium down, and the

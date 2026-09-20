@@ -1,3 +1,5 @@
+use crate::app::input::keymap;
+
 /// Choosing which held agent to show next. No filter: the list is short, and
 /// the numbers on the rows are the fast path.
 pub struct Goto {
@@ -31,9 +33,9 @@ impl Goto {
     }
 
     /// The row a digit names, or None when it names one that is not there.
-    /// Rows are numbered from one, so `0` never names anything.
+    /// Numbered the way the prefix numbers them: from one, `0` the tenth.
     pub fn row_for(&self, digit: char) -> Option<usize> {
-        let index = (digit.to_digit(10)?.checked_sub(1)?) as usize;
+        let index = keymap::row_for_digit(digit)?;
         (index < self.len).then_some(index)
     }
 }

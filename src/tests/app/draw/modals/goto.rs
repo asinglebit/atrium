@@ -36,7 +36,7 @@ fn it_lists_every_held_agent_with_its_number() {
 #[test]
 fn it_says_how_to_use_itself() {
     let registry = registry_of(&["/tmp"]);
-    assert!(rendered(&registry, &Goto::new(1, 0)).contains("1-9 jump"));
+    assert!(rendered(&registry, &Goto::new(1, 0)).contains("1-0 jump"));
 }
 
 #[test]

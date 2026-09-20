@@ -74,7 +74,7 @@ added profile is not worth keeping.
 `edit config dir`, `edit args`, `delete`. Editing prefills with what is there
 now, so it is a correction rather than retyping. Deleting asks first.
 
-Every change is written straight away and taken up at once — the next `ctrl+t`
+Every change is written straight away and taken up at once — the next `ctrl+space` `n`
 sees it without atrium being restarted. A refusal, such as a name already taken,
 stays in the modal so the answer can be corrected without starting again.
 
@@ -89,7 +89,7 @@ argument containing one. The prompt says so rather than pretending otherwise.
   aliases collapse into.
 - **The [[Splash]]**, which is what a bare `atrium` opens on: the profiles are
   its list, and enter holds the selected one where you started.
-- **`ctrl+t`**, then `tab`. The picker's `tab` used to cycle bare CLI names; it
+- **`ctrl+space` `n`**, then `tab`. The picker's `tab` used to cycle bare CLI names; it
   now cycles profiles, so the axis that already existed does the job and the
   modal gained no new key. See [[Modals]].
 

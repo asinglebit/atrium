@@ -10,7 +10,10 @@ use crate::{
     adapters,
     app::{
         draw,
-        input::{keymap::Keymap, keys},
+        input::{
+            keymap::{self, Keymap},
+            keys,
+        },
         state::{
             goto::Goto,
             layout,
@@ -255,7 +258,7 @@ impl App {
         // The splash takes the bare terminal: no frame, no title line, no status
         // line. Nothing is held, so none of them would have anything to say.
         if self.is_bare() {
-            draw::splash::draw(frame, frame.area(), &self.splash, &self.profiles, &self.theme);
+            draw::splash::draw(frame, frame.area(), &self.splash, &self.profiles, &self.theme, &self.keymap);
         } else {
             frame.render_widget(draw::pane::app_frame(&self.theme), layout.app);
 
@@ -329,6 +332,13 @@ impl App {
     }
 
     fn on_key(&mut self, key: KeyEvent) -> io::Result<()> {
+        // Every list here already walks on the arrows, so ctrl+j and ctrl+k are
+        // turned into them once, here, rather than in each list -- including
+        // the boxes where a bare letter is text being typed rather than a
+        // direction. Only where atrium is taking keys at all: otherwise ctrl+j
+        // is the agent's, like every other chord behind the prefix.
+        let key = if self.owns_keyboard() { keymap::as_arrow(key) } else { key };
+
         if self.profile_editor.is_some() {
             self.on_editor_key(key);
             return Ok(());
@@ -370,6 +380,12 @@ impl App {
         self.send(key)
     }
 
+    /// True while something of atrium's is taking keys rather than the agent: a
+    /// modal, the settings view, the menu, or the splash with nothing held.
+    fn owns_keyboard(&self) -> bool {
+        self.profile_editor.is_some() || self.menu.is_some() || self.settings.is_some() || self.modal.is_some() || self.registry.is_empty()
+    }
+
     /// True when the key meant something. Everything reaches the agent now, so
     /// this only ever runs on the key after the prefix.
     fn take_action(&mut self, key: &KeyEvent) -> bool {
@@ -390,6 +406,10 @@ impl App {
             self.registry.focus_next();
         } else if keymap.previous.matches(key) {
             self.registry.focus_prev();
+        } else if let Some(index) = keymap::agent_for(key) {
+            // Last, so a digit someone has bound to an action is still that
+            // action; an unbound one is the row it numbers.
+            self.registry.focus_at(index);
         } else {
             return false;
         }

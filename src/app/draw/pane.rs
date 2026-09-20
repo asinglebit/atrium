@@ -134,8 +134,13 @@ pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, width:
         .zip(&profiles)
         .enumerate()
         .map(|(index, ((agent, branch), profile))| {
-            // Only the first nine get a jump number, so only they are numbered.
-            let key = if index < 9 { format!("{} ", index + 1) } else { "  ".to_owned() };
+            // Ten rows can be reached by a key, numbered 1 to 9 and then 0.
+            // Past that there is no key to write down, so nothing is written.
+            let key = match index {
+                0..=8 => format!("{} ", index + 1),
+                9 => "0 ".to_owned(),
+                _ => "  ".to_owned(),
+            };
             // A working agent spins where the others show a steady glyph.
             let mark = if agent.status == Status::Working { spinner.to_string() } else { agent.status.glyph().to_owned() };
             let body = if agent.has_exited() { theme.COLOR_GREY_600 } else { theme.COLOR_GREY_300 };

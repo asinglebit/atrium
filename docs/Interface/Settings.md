@@ -1,6 +1,6 @@
 # Settings
 
-`ctrl+s` opens it, `esc` closes it. It takes the whole inside of the frame,
+`ctrl+space` `?` opens it, `esc` closes it. It takes the whole inside of the frame,
 hiding the [[Sidebar]] for as long as it is open.
 
 This is guitar's settings view, copied rather than imitated: same column width,

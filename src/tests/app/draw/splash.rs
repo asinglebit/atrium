@@ -1,4 +1,6 @@
 use super::*;
+
+use crate::app::input::keymap::Keymap;
 use crate::core::profile::Profile;
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -16,7 +18,7 @@ fn rendered(splash: &Splash, width: u16, height: u16) -> String {
 
 fn rendered_with(splash: &Splash, profiles: &[Profile], width: u16, height: u16) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), splash, profiles, &Theme::classic())).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), splash, profiles, &Theme::classic(), &Keymap::default())).expect("draw");
     terminal.backend().buffer().content().chunks(width as usize).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -135,7 +137,7 @@ fn the_wordmark_lightens_at_the_top() {
     let splash = Splash::new(3, 0);
 
     let mut terminal = Terminal::new(TestBackend::new(80, 30)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), &splash, &profiles, &theme)).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), &splash, &profiles, &theme, &Keymap::default())).expect("draw");
 
     let buffer = terminal.backend().buffer();
     let rows_with = |colour| (0..30).filter(|row| (0..80).any(|column| buffer[(column, *row)].fg == colour && buffer[(column, *row)].symbol() != " ")).collect::<Vec<u16>>();

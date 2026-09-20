@@ -24,19 +24,20 @@ All of it optional:
 name = "one dark warmer"   # any of the 47 preset names
 
 [keys]
-action = "ctrl+a"
+action = "ctrl+space"
 quit = "q"
-goto = "g"
+goto = "space"
 settings = "?"
-sidebar = "1"
+sidebar = "shift+1"   # or "!", which is the same keystroke
 new = "n"
 dismiss = "x"
 next = "j"
 previous = "k"
 ```
 
-See [[Keys]] for how a chord is written, and for the constraint that a binding
-has to be one a terminal can actually deliver.
+There is no entry for the digits: `1`…`9` and `0` name the agent on that row
+and are not rebindable. See [[Keys]] for how a chord is written, and for the
+constraint that a binding has to be one a terminal can actually deliver.
 
 A file that still carries a `[[profiles]]` block or a `default` is **told where
 they went** rather than having them silently ignored — `--check-config` names

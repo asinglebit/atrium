@@ -19,7 +19,7 @@ So the fallback is one-way: atrium will follow guitar, but never edit it.
 
 ## Picking one
 
-Themes are easier picked than typed. `ctrl+s` opens [[Settings]], where the
+Themes are easier picked than typed. `ctrl+space` `?` opens [[Settings]], where the
 themes tab lists all 47 and `enter` applies one. `config.toml` takes a preset
 **name**; individual colours are not set there, they live in `theme.json`.
 

@@ -36,8 +36,9 @@ fn digits_name_rows_from_one() {
 }
 
 #[test]
-fn zero_names_nothing_because_rows_start_at_one() {
-    assert_eq!(Goto::new(3, 0).row_for('0'), None);
+fn zero_names_the_tenth_row() {
+    assert_eq!(Goto::new(10, 0).row_for('0'), Some(9));
+    assert_eq!(Goto::new(3, 0).row_for('0'), None, "there is no tenth row to name");
 }
 
 #[test]

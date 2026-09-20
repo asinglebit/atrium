@@ -57,7 +57,7 @@ to set it — see [[Mouse]] — and the width is remembered in `layout.json`, se
 [[Configuration]].
 
 **It starts hidden.** One agent is the common case, and a row listing it alone
-says nothing the status line does not. `ctrl+o` brings it in, at whatever width
+says nothing the status line does not. `ctrl+space` `shift+1` brings it in, at whatever width
 you last dragged it to.
 
 The [[Settings]] view and the [[Splash]] hide it for as long as they are up,
