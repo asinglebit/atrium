@@ -4,6 +4,12 @@
 > shape still moves week to week. Bindings, config files and layout are all
 > fair game to change, and nothing here is stable yet.
 
+<img width="3814" height="2088" alt="image" src="https://github.com/user-attachments/assets/e7161f48-51f5-4c9f-bff3-1d55ef34b80e" />
+<img width="3814" height="2088" alt="image" src="https://github.com/user-attachments/assets/4a8e83aa-3d04-4b82-ae3c-03f90321ef2f" />
+<img width="3814" height="2088" alt="image" src="https://github.com/user-attachments/assets/e6d57b69-37f0-4ac6-9d57-ed66fc6260c2" />
+<img width="3814" height="2088" alt="image" src="https://github.com/user-attachments/assets/ccf7be67-2652-456a-ac9d-210b88f30b52" />
+
+
 A terminal UI that **holds coding agents**. Start it in any terminal; it spawns
 agent CLIs as its own children and keeps them in a sidebar, showing what each
 one is doing. Switch between them inside atrium.
