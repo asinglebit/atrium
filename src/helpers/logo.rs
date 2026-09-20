@@ -38,15 +38,6 @@ pub const NARROW: [&str; 7] = [
 
 pub const NARROW_WIDTH: usize = 39;
 
-/// The word in five rows, for a header with less room to give than the splash
-/// -- which is the settings view.
-///
-/// The top two rows carry only the dot on the `i` and the ascender on the `t`;
-/// the three below are the x-height every letter shares.
-pub const BLOCK: [&str; 5] = ["      █      █           ", "      █                  ", "▄▀▀█ ███ █▄▄ █ █  █ █▀█▀█", "█  █  █  █   █ █  █ █ █ █", "▀▀▀▀  ▀▀ █   █  ▀▀▀ █ █ █"];
-
-pub const BLOCK_WIDTH: usize = 25;
-
 /// What a column with room for none of them gets instead. The hooked `ɱ` is the
 /// drawn wordmark's tail kept at one row -- guitar ends its own compact logo on
 /// a corner glyph the same way.
@@ -75,10 +66,11 @@ pub fn tone(index: usize, rows: &[&str], theme: &Theme) -> Color {
     if index < bright_rows(rows.len()) { theme.COLOR_PINK } else { theme.COLOR_PURPLE }
 }
 
-/// The block or the word. What the settings header uses, which cannot afford a
-/// drawn wordmark before the first setting.
+/// The smaller wordmark or the word. What the settings header uses, which never
+/// takes the wide one however much width it has: the version line, the tab bar
+/// and the first setting all have to fit underneath it.
 pub fn rows_for(width: usize) -> &'static [&'static str] {
-    if width >= BLOCK_WIDTH { &BLOCK } else { std::slice::from_ref(&COMPACT) }
+    if width >= NARROW_WIDTH { &NARROW } else { std::slice::from_ref(&COMPACT) }
 }
 
 /// The biggest the terminal has room for. What the splash uses, where the

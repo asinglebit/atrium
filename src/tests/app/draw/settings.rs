@@ -125,7 +125,7 @@ fn the_version_and_the_wordmark_head_every_tab() {
     for tab in Tab::ALL {
         let (_, out) = on_tab(tab, 90);
         assert!(out.contains("version:"), "{tab:?} has no version row:\n{out}");
-        assert!(out.contains('▀'), "{tab:?} has no wordmark:\n{out}");
+        assert!(out.contains("X@BwP@"), "{tab:?} has no wordmark:\n{out}");
     }
 }
 

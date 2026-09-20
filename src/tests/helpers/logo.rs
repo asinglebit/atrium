@@ -8,22 +8,19 @@ fn every_row_of_a_wordmark_is_the_same_width() {
     for row in NARROW {
         assert_eq!(row.chars().count(), NARROW_WIDTH, "ragged row: {row:?}");
     }
-    for row in BLOCK {
-        assert_eq!(row.chars().count(), BLOCK_WIDTH, "ragged row: {row:?}");
-    }
 }
 
 #[test]
 fn every_wordmark_fits_the_width_it_is_drawn_at() {
     assert!(WIDE.iter().all(|row| row.chars().count() < WIDE_COLUMNS), "the wide wordmark has to leave room around it at the width that chooses it");
     assert!(NARROW.iter().all(|row| row.chars().count() < NARROW_COLUMNS));
-    assert!(COMPACT.chars().count() < BLOCK_WIDTH, "the fallback has to fit where the block does not");
+    assert!(COMPACT.chars().count() < NARROW_WIDTH, "the fallback has to fit where the small wordmark does not");
 }
 
 #[test]
-fn the_settings_header_never_takes_a_drawn_wordmark() {
-    assert_eq!(rows_for(WIDE_COLUMNS).len(), BLOCK.len(), "fourteen rows before the first setting is too many");
-    assert_eq!(rows_for(BLOCK_WIDTH).len(), BLOCK.len());
+fn the_settings_header_never_takes_the_wide_wordmark() {
+    assert_eq!(rows_for(WIDE_COLUMNS).len(), NARROW.len(), "fourteen rows before the first setting is too many");
+    assert_eq!(rows_for(NARROW_WIDTH).len(), NARROW.len());
 }
 
 #[test]
@@ -37,12 +34,12 @@ fn the_splash_takes_the_biggest_that_fits() {
 
 #[test]
 fn a_column_too_narrow_gets_the_word_instead() {
-    assert_eq!(rows_for(BLOCK_WIDTH - 1), [COMPACT]);
+    assert_eq!(rows_for(NARROW_WIDTH - 1), [COMPACT]);
 }
 
 #[test]
 fn both_tones_reach_something_on_every_size() {
-    for total in [WIDE.len(), NARROW.len(), BLOCK.len()] {
+    for total in [WIDE.len(), NARROW.len()] {
         let bright = bright_rows(total);
         assert!(bright > 0, "{total} rows left the lighter tone with nothing");
         assert!(bright < total, "{total} rows left the darker tone with nothing");
@@ -61,7 +58,7 @@ fn the_lighter_tone_is_the_top_third_rounded_up() {
 fn the_top_rows_are_pink_and_the_rest_are_darker() {
     let theme = Theme::classic();
 
-    for rows in [WIDE.as_slice(), NARROW.as_slice(), BLOCK.as_slice()] {
+    for rows in [WIDE.as_slice(), NARROW.as_slice()] {
         assert_eq!(tone(0, rows, &theme), theme.COLOR_PINK);
         assert_eq!(tone(rows.len() - 1, rows, &theme), theme.COLOR_PURPLE);
     }
@@ -73,7 +70,7 @@ fn every_wordmark_opens_on_a_row_that_carries_ink() {
     // the letters while the top row paints something -- the dot of the `i` at
     // the least. A wordmark opening on a blank row would spend the lighter tone
     // on nothing.
-    for rows in [WIDE.as_slice(), NARROW.as_slice(), BLOCK.as_slice()] {
+    for rows in [WIDE.as_slice(), NARROW.as_slice()] {
         assert!(!rows[0].trim().is_empty(), "blank top row: {:?}", rows[0]);
     }
 }

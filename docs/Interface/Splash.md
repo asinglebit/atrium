@@ -70,9 +70,10 @@ own logo across two greens the same way. Every size opens on a row that carries
 **ink** — the dot of the `i` at the least — so a plain share of the rows puts the
 lighter tone on the tops of the letters, which is where it reads.
 
-The five-row block [[Settings]] is headed with is **not** on this ladder. That
-view has a version line, a tab bar and then the first setting to fit underneath,
-and no drawn wordmark leaves room for all three.
+[[Settings]] is headed with the same small wordmark, on a rule of its own: it
+never takes the wide one however wide the terminal, because the version line,
+the tab bar and the first setting all have to fit underneath it, and it drops to
+the word as soon as its column is narrower than the small wordmark is wide.
 
 ## No chrome
 
