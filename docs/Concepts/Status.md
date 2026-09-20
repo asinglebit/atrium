@@ -39,6 +39,13 @@ Claude reports through hooks. `opencode` and `codex` are held but only watched.
 
 Unknown events are ignored rather than guessed at.
 
+## A second spelling, for matching
+
+Inside tmux the same statuses are written onto the pane as one word each, where
+`NeedsInput` becomes `needs-input` rather than "needs you" -- the value is
+matched against inside a format string, and a space would not survive it. The
+labels above are for reading. See [[In tmux]].
+
 ## Exited is terminal
 
 Once an agent has exited it stays exited — a hook that arrives late must not

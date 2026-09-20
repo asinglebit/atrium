@@ -17,9 +17,14 @@ a glance which one is working, which one is waiting on you, and what repository
 each is standing in. The defaults are opinionated because they are one person's
 defaults, and the scope stops where that day's work stops.
 
-It is not a multiplexer and it is not tmux-aware. Run it inside tmux, inside
-ssh, on a bare TTY — atrium neither knows nor cares. Run a second one in another
-pane and it holds its own, independent set.
+It is not a multiplexer. Run it inside tmux, inside ssh, on a bare TTY — atrium
+works the same either way, and a second one in another pane holds its own,
+independent set.
+
+Inside tmux it does say one thing: what the agents it holds need, written onto
+the pane it is drawing in, so the window around it can colour itself. It still
+drives nothing and depends on nothing — the mirror of the way an agent calls
+back into atrium, and just as quiet when nobody is listening.
 
 ```
   atriuɱ |  ~/projects/personal/atrium                                            agents
@@ -59,6 +64,9 @@ atrium                    # open on the splash and pick a harness
 atrium --profile personal # skip it and hold that one here
 atrium bash --norc        # skip it and hold anything else, no profile at all
 atrium --check-config     # what the config says, and what it got wrong
+
+atrium worktree new fix-42   # cut a worktree beside this repo, on that branch
+atrium worktree list         # what this repository owns
 ```
 
 Started with nothing to go on, atrium **opens on a splash** listing what it can
@@ -89,6 +97,72 @@ else it offers the rest. Inside the agent the wheel scrolls back through its
 history, and every other mouse event is forwarded on to an agent that asked the
 terminal for the mouse — which is also what decides whether the wheel is
 atrium's to answer or the agent's.
+
+## Worktrees
+
+```sh
+atrium worktree new fix-42          # beside the repo, on a new branch of that name
+atrium worktree new fix-42 --in ~/projects/personal/guitar
+atrium worktree list
+```
+
+A worktree lands **beside** the repository, named for both — `atrium` plus
+`fix-42` gives `atrium-fix-42` — on a branch of the same name. That is guitar's
+convention, followed here so a worktree made by either tool looks the same. If
+the worktree cannot be made, the branch that was made for it is deleted again,
+because a half-made worktree that leaves its branch behind is the failure you
+trip over next time.
+
+Neither subcommand opens the TUI. An agent asking for somewhere to work should
+not have to, which is the whole reason these exist.
+
+### Saying so
+
+Having made one, atrium runs whatever `WORKTREE_HOOK` names:
+
+```
+$WORKTREE_HOOK created /projects/personal/atrium-fix-42
+```
+
+Unset, missing or failing: nothing happens, and that is the ordinary case. It is
+the same policy as `atrium hook` in the other direction — an announcement is
+never worth interrupting anything over. The variable is deliberately not spelled
+`ATRIUM_*`, because guitar reads the same one and spells the call the same way,
+so a single hook serves both.
+
+atrium also **notices worktrees it did not make**. On the same three-second tick
+that re-reads the branch, it looks at the worktrees of the repositories its
+agents are standing in, and announces any that have appeared. That covers guitar
+with no hook set, and a bare `git worktree add` in a shell. A repository seen for
+the first time announces nothing — its worktrees were already there, and saying
+so at startup is noise rather than news.
+
+## In tmux
+
+Given a pane to draw in, atrium writes what it needs onto it:
+
+| Option | Value |
+| --- | --- |
+| `@atrium_status` | `idle`, `working`, `needs-input` or `error` — the worst of what the held agents are doing |
+| `@atrium_agents` | `<held> <working> <needs> <error>` |
+
+`needs-input` is hyphenated rather than spelled the way the status line spells
+it, because the value is matched against inside a tmux format string and "needs
+you" would not survive the split. `Exited` is not published at all: a row that
+has finished is not something to be pulled back to, and an atrium holding
+nothing but dead agents needs nothing.
+
+It is written only when it changes — saying it every frame would be a process
+every sixteen milliseconds — and cleared when atrium quits. The first frame
+always writes it, which is what makes a fresh atrium clear a value left in that
+pane by one that was killed rather than quit. Killed with `SIGKILL` it cannot
+clear anything, and the stale value stands until something takes the pane.
+
+Nothing reads these but whatever you point at them. [tmuxbar][] colours each
+window by the worst thing the atriums in it need, which is a format string over
+the window's own panes rather than anything that polls.
+
+[tmuxbar]: https://github.com/asinglebit/tmux
 
 ## Config
 

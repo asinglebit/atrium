@@ -22,6 +22,7 @@ is why the defaults are opinionated and the scope stops where that work stops.
 - [[Status]] — the five states, where they come from, what they look like
 - [[Profiles]] — subscriptions, and anything else a CLI needs to be launched with
 - [[Projects]] — how the project list is found
+- [[Worktrees]] — cutting somewhere new to hold an agent, and saying so
 
 ### Interface
 
@@ -46,6 +47,7 @@ is why the defaults are opinionated and the scope stops where that work stops.
 
 - [[Adapters and hooks]] — how an agent reports what it is doing
 - [[Layout]] — where everything goes, and what happens when it does not fit
+- [[In tmux]] — the one thing atrium says about itself, and to whom
 - [[Code map]] — the module tree and the test convention
 
 ## The shape of it

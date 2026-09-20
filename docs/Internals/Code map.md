@@ -16,6 +16,9 @@ src/
     profiles_file.rs   profiles.json: the profiles as written down, and editing them
     installed.rs       Which of the CLIs atrium knows are on this machine
     layout_config.rs   The sidebar width, in layout.json
+    worktree.rs        Cutting one, listing them, and noticing a new one
+    tmux.rs            The two pane options, when atrium is drawing in a pane
+    notify.rs          $WORKTREE_HOOK: a worktree appeared, said once
 
   adapters/            Per-CLI launch and status wiring
     claude.rs          --settings hooks, in exec form
