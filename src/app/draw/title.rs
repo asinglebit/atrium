@@ -5,7 +5,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{app::state::layout::Layout, helpers::palette::Theme, helpers::text::truncate_start};
+use crate::{app::state::layout::Layout, helpers::logo, helpers::palette::Theme, helpers::text::truncate_start};
 
 /// The same glyph guitar puts in front of a path.
 const FOLDER: &str = "";
@@ -16,8 +16,8 @@ pub fn draw(frame: &mut Frame, layout: &Layout, theme: &Theme, cwd: &str, view: 
     let room = layout.title_left.width.saturating_sub(15) as usize;
 
     let left = Line::from(vec![
-        // atrium's own colour, the same purple the logo is drawn in.
-        Span::styled("  atrium", Style::default().fg(theme.COLOR_PURPLE)),
+        // The wordmark at its smallest, in the pink its top rows take.
+        Span::styled(format!("  {}", logo::COMPACT), Style::default().fg(theme.COLOR_PINK)),
         Span::styled(" |", Style::default().fg(theme.COLOR_TEXT)),
         Span::styled(format!(" {FOLDER} {}", truncate_start(cwd, room)), Style::default().fg(theme.COLOR_TEXT)),
     ]);

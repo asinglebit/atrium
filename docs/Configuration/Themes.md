@@ -90,6 +90,6 @@ rewritten at once, so the next one is already right.
 `COLOR_GREEN`, `COLOR_GREY_400`, `COLOR_GREY_600` — rather than colours of
 atrium's own, so the two tools can never disagree about what red is.
 
-atrium's own accent is `COLOR_PURPLE` — the `atrium` on the title line, and the
-lower part of the wordmark in [[Settings]] and on the [[Splash]], whose top 30%
-takes `COLOR_PINK` above it.
+atrium's own accent is a pair: `COLOR_PINK` for the `atriuɱ` on the title line
+and the top 30% of the wordmark in [[Settings]] and on the [[Splash]],
+`COLOR_PURPLE` for the rest of it below.

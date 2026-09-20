@@ -36,7 +36,8 @@ all, whereas a clamped 45 squeezes instead.
 
 ## The title and status lines
 
-The title line carries `atrium` in `COLOR_PURPLE`, then the focused agent's
+The title line carries `atriuɱ` — the wordmark at its smallest — in
+`COLOR_PINK`, then the focused agent's
 working directory, truncated **from the front** — the last components are the
 ones that identify a path. The right half says what you are looking at:
 `agents`, `settings`, `new agent`, `go to`.

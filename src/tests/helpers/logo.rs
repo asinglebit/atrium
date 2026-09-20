@@ -5,34 +5,44 @@ fn every_row_of_a_wordmark_is_the_same_width() {
     for row in WIDE {
         assert_eq!(row.chars().count(), WIDE_WIDTH, "ragged row: {row:?}");
     }
+    for row in NARROW {
+        assert_eq!(row.chars().count(), NARROW_WIDTH, "ragged row: {row:?}");
+    }
     for row in BLOCK {
         assert_eq!(row.chars().count(), BLOCK_WIDTH, "ragged row: {row:?}");
     }
 }
 
 #[test]
-fn the_settings_header_never_takes_the_tall_one() {
-    assert_eq!(rows_for(WIDE_WIDTH).len(), BLOCK.len(), "eleven rows before the first setting is too many");
+fn every_wordmark_fits_the_width_it_is_drawn_at() {
+    assert!(WIDE.iter().all(|row| row.chars().count() < WIDE_COLUMNS), "the wide wordmark has to leave room around it at the width that chooses it");
+    assert!(NARROW.iter().all(|row| row.chars().count() < NARROW_COLUMNS));
+    assert!(COMPACT.chars().count() < BLOCK_WIDTH, "the fallback has to fit where the block does not");
+}
+
+#[test]
+fn the_settings_header_never_takes_a_drawn_wordmark() {
+    assert_eq!(rows_for(WIDE_COLUMNS).len(), BLOCK.len(), "fourteen rows before the first setting is too many");
     assert_eq!(rows_for(BLOCK_WIDTH).len(), BLOCK.len());
 }
 
 #[test]
 fn the_splash_takes_the_biggest_that_fits() {
     assert_eq!(splash_rows_for(200).len(), WIDE.len());
-    assert_eq!(splash_rows_for(WIDE_WIDTH).len(), WIDE.len());
-    assert_eq!(splash_rows_for(WIDE_WIDTH - 1).len(), BLOCK.len());
-    assert_eq!(splash_rows_for(BLOCK_WIDTH - 1), [COMPACT]);
+    assert_eq!(splash_rows_for(WIDE_COLUMNS).len(), WIDE.len());
+    assert_eq!(splash_rows_for(WIDE_COLUMNS - 1).len(), NARROW.len());
+    assert_eq!(splash_rows_for(NARROW_COLUMNS).len(), NARROW.len());
+    assert_eq!(splash_rows_for(NARROW_COLUMNS - 1), [COMPACT]);
 }
 
 #[test]
 fn a_column_too_narrow_gets_the_word_instead() {
     assert_eq!(rows_for(BLOCK_WIDTH - 1), [COMPACT]);
-    assert!(COMPACT.chars().count() < BLOCK_WIDTH, "the fallback has to fit where the block does not");
 }
 
 #[test]
 fn both_tones_reach_something_on_every_size() {
-    for total in [WIDE.len(), BLOCK.len()] {
+    for total in [WIDE.len(), NARROW.len(), BLOCK.len()] {
         let bright = bright_rows(total);
         assert!(bright > 0, "{total} rows left the lighter tone with nothing");
         assert!(bright < total, "{total} rows left the darker tone with nothing");
@@ -51,23 +61,27 @@ fn the_lighter_tone_is_the_top_third_rounded_up() {
 fn the_top_rows_are_pink_and_the_rest_are_darker() {
     let theme = Theme::classic();
 
-    assert_eq!(tone(0, &WIDE, &theme), theme.COLOR_PINK);
-    assert_eq!(tone(WIDE.len() - 1, &WIDE, &theme), theme.COLOR_PURPLE);
-    assert_eq!(tone(0, &BLOCK, &theme), theme.COLOR_PINK);
-    assert_eq!(tone(BLOCK.len() - 1, &BLOCK, &theme), theme.COLOR_PURPLE);
+    for rows in [WIDE.as_slice(), NARROW.as_slice(), BLOCK.as_slice()] {
+        assert_eq!(tone(0, rows, &theme), theme.COLOR_PINK);
+        assert_eq!(tone(rows.len() - 1, rows, &theme), theme.COLOR_PURPLE);
+    }
 }
 
 #[test]
-fn the_share_is_counted_over_the_rows_that_carry_ink() {
-    let theme = Theme::classic();
+fn every_wordmark_opens_on_a_row_that_carries_ink() {
+    // The share is a plain count of the rows, which only lands on the tops of
+    // the letters while the top row paints something -- the dot of the `i` at
+    // the least. A wordmark opening on a blank row would spend the lighter tone
+    // on nothing.
+    for rows in [WIDE.as_slice(), NARROW.as_slice(), BLOCK.as_slice()] {
+        assert!(!rows[0].trim().is_empty(), "blank top row: {:?}", rows[0]);
+    }
+}
 
-    // The wide wordmark opens with a blank row. Counting it would leave the
-    // lighter tone on nothing but the dot of the i and the stem of the t.
-    assert!(WIDE[0].trim().is_empty(), "this test is about that blank row");
-    let pink = (0..WIDE.len()).filter(|index| tone(*index, &WIDE, &theme) == theme.COLOR_PINK).count();
-
-    assert_eq!(pink, 4, "the blank row plus the top three that carry ink");
-    assert!(!WIDE[pink - 1].trim().is_empty(), "the last pink row should be one you can see");
+#[test]
+fn the_word_ends_on_the_tail_the_drawn_ones_do() {
+    assert!(COMPACT.starts_with("atriu"), "it is still the name: {COMPACT}");
+    assert!(COMPACT.ends_with('ɱ'), "the hook is the tail, kept at one row: {COMPACT}");
 }
 
 #[test]

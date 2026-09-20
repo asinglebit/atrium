@@ -34,7 +34,7 @@ fn the_wordmark_sits_above_the_list() {
     let out = rendered(&Splash::new(3, 0), 80, 30);
     let lines: Vec<&str> = out.lines().collect();
 
-    let logo = lines.iter().position(|line| line.contains("YMMM9")).expect("the wordmark:\n{out}");
+    let logo = lines.iter().position(|line| line.contains("X@BwP@")).expect("the wordmark:\n{out}");
     let heading = lines.iter().position(|line| line.contains(HEADING)).expect("the heading");
     let first = lines.iter().position(|line| line.contains("work")).expect("a harness");
 
@@ -61,18 +61,26 @@ fn the_content_is_centred_in_the_frame() {
 }
 
 #[test]
-fn a_narrow_frame_falls_back_to_the_smaller_wordmark() {
-    let out = rendered(&Splash::new(3, 0), 40, 30);
+fn a_wide_frame_gets_the_wordmark_at_its_largest() {
+    let out = rendered(&Splash::new(3, 0), 130, 40);
 
-    assert!(!out.contains("YMMM9"), "the wide wordmark does not fit and should not be drawn:\n{out}");
-    assert!(out.contains('▀'), "the block should stand in for it:\n{out}");
+    assert!(out.contains("I$#R#BR$$"), "{out}");
+}
+
+#[test]
+fn a_narrower_frame_falls_back_to_the_smaller_wordmark() {
+    let out = rendered(&Splash::new(3, 0), 100, 30);
+
+    assert!(!out.contains("I$#R#BR$$"), "the wide wordmark is not what 100 columns gets:\n{out}");
+    assert!(out.contains("X@BwP@"), "the small one should stand in for it:\n{out}");
 }
 
 #[test]
 fn a_frame_too_narrow_for_either_still_names_the_tool() {
-    let out = rendered(&Splash::new(3, 0), 20, 30);
+    let out = rendered(&Splash::new(3, 0), 60, 30);
 
     assert!(out.contains(logo::COMPACT), "{out}");
+    assert!(!out.contains("X@BwP@"), "below 80 columns nothing is drawn but the word:\n{out}");
 }
 
 #[test]

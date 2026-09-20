@@ -6,12 +6,13 @@ wrote down, and then whatever CLI atrium knows and found installed that none of
 them already names.
 
 ```
-              68b
- /            Y89
- ___   /M     ___  __ ___ ___   ___ ___  __    __
-6MMMMb /MMMMM  `MM 6MM `MM `MM    MM `MM 6MMb  6MMb
-…
-`YMMM9'Yb.YMMM9 _MM_    _MM_  YMMM9MM__MM_  _MM_  _MM_
+                  o
+        @
+P$XR@  P@PP  @BB~ @  #B   @  #BP0@R$0B$
+  !v@!  @    @+   @  #B   @  w@   @   @
+@   @!  @    @+   @  $@   @  w@   @   @
+X@BwP@  w@B  @+   @   @BBw@  w@   @   @
+                                      @
 
                       harnesses
 
@@ -54,18 +55,24 @@ Offering a `codex` that is not there would only produce that failure line.
 
 ## The wordmark
 
-Three sizes, the largest that fits, the way guitar's scales:
+Three sizes, on guitar's two breakpoints rather than on the widths the art
+happens to need — a wordmark reaching the edges of the terminal is not the same
+picture as one with room left around it:
 
 | Columns | What is drawn |
 | --- | --- |
-| 54 and up | The full wordmark, eleven rows |
-| 25 to 53 | The block, five rows — the same one [[Settings]] is headed with |
-| below 25 | The word `atrium` |
+| 120 and up | The wordmark drawn out, fourteen rows, tail and all |
+| 80 to 119 | The same word at half the height, seven rows |
+| below 80 | The word `atriuɱ`, whose hooked `m` is that tail kept at one row |
 
 The top 30% take `COLOR_PINK` and the rest `COLOR_PURPLE` — guitar splits its
-own logo across two greens the same way. The share is counted over the rows that
-carry **ink**: the wide wordmark opens with a blank row, and counting it would
-leave the lighter tone on the dot of the `i` and nothing else.
+own logo across two greens the same way. Every size opens on a row that carries
+**ink** — the dot of the `i` at the least — so a plain share of the rows puts the
+lighter tone on the tops of the letters, which is where it reads.
+
+The five-row block [[Settings]] is headed with is **not** on this ladder. That
+view has a version line, a tab bar and then the first setting to fit underneath,
+and no drawn wordmark leaves room for all three.
 
 ## No chrome
 

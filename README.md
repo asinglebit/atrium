@@ -22,7 +22,7 @@ ssh, on a bare TTY — atrium neither knows nor cares. Run a second one in anoth
 pane and it holds its own, independent set.
 
 ```
-  atrium |  ~/projects/personal/atrium                                            agents
+  atriuɱ |  ~/projects/personal/atrium                                            agents
 ╭────────────────────────────────────────────────────────────────────────────────────────╮
 │ ⠙ 1 atrium                         master* │ ▐▛███▛█   Claude Code v2.1.278            │
 │ ● 2 guitar                            main │▝▜██████▀  Opus 5 (1M context)             │
@@ -141,7 +141,7 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/core/installed.rs` | Which of the CLIs atrium knows are on this machine, and where |
 | `src/app/state/profile_editor.rs` | The add/manage/delete flow behind the profiles tab |
 | `src/app/draw/splash.rs` | What atrium shows while it holds nothing: the wordmark, and what it could hold |
-| `src/helpers/logo.rs` | The wordmark, in three sizes |
+| `src/helpers/logo.rs` | The wordmark, and which size a width gets |
 | `src/core/layout_config.rs` | The one thing atrium writes back: the sidebar's width, in `layout.json` |
 | `src/adapters/` | Per-CLI launch, status and theme wiring — `claude`, `opencode`, and a stub for `codex` |
 | `src/ipc/server.rs` | The unix socket agents report back through |
@@ -311,13 +311,17 @@ and none at all once the sidebar was hidden. On a row the menu offers that
 agent by name; anywhere else it offers what can be done regardless. It quotes
 the chord beside each entry, so it doubles as the place the keys are learnt.
 
-**The wordmark lightens at the top, and the share is counted over the rows that
-carry ink.** The top 30% take `COLOR_PINK` and the rest `COLOR_PURPLE`, which is
-guitar splitting its own logo across two greens, in atrium's colours. The wide
-wordmark opens with a **blank** row, though, and counting that one would spend a
-third of the lighter tone on a row that paints nothing — leaving the pink on the
-dot of the `i` and nothing else. Counting from the first row with ink in it puts
-the lighter tone on the tops of the letters, which is where it reads.
+**The wordmark lightens at the top, and changes size on guitar's breakpoints
+rather than on the widths the art needs.** The top 30% take `COLOR_PINK` and the
+rest `COLOR_PURPLE`, which is guitar splitting its own logo across two greens, in
+atrium's colours. Every size opens on a row that carries ink — the dot of the `i`
+at the least — so a plain share of the rows puts the lighter tone on the tops of
+the letters, which is where it reads. The splash trades the drawn wordmark for a
+smaller one at **120** columns and for the word at **80**, the two widths guitar
+swaps its own logo at: the art fits well before either, but a wordmark reaching
+the edges of the terminal is not the same picture as one with room left around
+it. The word is `atriuɱ`, because the hook is what the drawn tail comes to when
+there is one row to draw it in.
 
 It also stands where guitar's heatmap stands: guitar heads its settings with a
 contribution graph and lines every row up to its width, and atrium has no

@@ -51,7 +51,7 @@ is why the defaults are opinionated and the scope stops where that work stops.
 ## The shape of it
 
 ```
-  atrium |  ~/projects/personal/atrium                        agents
+  atriuɱ |  ~/projects/personal/atrium                        agents
 ╭──────────────────────────────────────────────────────────────────╮
 │ ⠙ 1 atrium               master* │ the focused agent's own       │
 │ ● 2 guitar                  main │ terminal, drawn as it drew    │
