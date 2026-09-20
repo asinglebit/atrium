@@ -28,6 +28,14 @@ pub fn worktree_created_with(hook: Option<OsString>, path: &Path) -> Option<Join
     Some(announce(hook, path.to_path_buf()))
 }
 
+/// The same announcement, waited for. A process that is about to exit would
+/// otherwise take the thread down with it before the hook had a chance to run.
+pub fn worktree_created_now(path: &Path) {
+    if let Some(handle) = worktree_created_with(std::env::var_os(HOOK_ENV), path) {
+        let _ = handle.join();
+    }
+}
+
 /// Run on a thread of its own, so a hook that sleeps cannot hold up a frame --
 /// and waited on there, so it leaves no zombie behind the way a bare spawn
 /// would. The same shape as the one short-lived thread per hook in `ipc`.

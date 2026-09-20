@@ -2,7 +2,7 @@ use std::io;
 
 use atrium::{
     AgentSpec, App, Config, VERSION,
-    core::{profile, projects},
+    core::{notify, profile, projects, worktree},
     helpers::palette,
     ipc::hook,
 };
@@ -13,6 +13,12 @@ use crossterm::{
 
 /// The subcommand agents call back through. Not a program you would run.
 const HOOK_SUBCOMMAND: &str = "hook";
+
+/// Cutting a worktree to hold an agent in. The door an agent asks through.
+const WORKTREE_SUBCOMMAND: &str = "worktree";
+
+/// Which repository to work on, when it is not the one you are standing in.
+const IN_FLAG: &str = "--in";
 
 /// Holds a named profile rather than the default one.
 const PROFILE_FLAG: &str = "--profile";
@@ -25,6 +31,8 @@ USAGE
     atrium --profile NAME     skip it and hold that profile here
     atrium [COMMAND ...]      skip it and hold COMMAND, with no profile at all
     atrium hook <EVENT>       report an agent's status (agents call this, you do not)
+    atrium worktree new NAME  cut a worktree beside this repo, on a branch of that name
+    atrium worktree list      the worktrees this repository owns
 
 OPTIONS
     -h, --help                show this
@@ -142,6 +150,66 @@ fn run_profile(name: Option<&String>, config: Config) -> io::Result<()> {
     run_tui(Some(AgentSpec::from_profile(&profile, cwd())), config)
 }
 
+/// `atrium worktree ...`. Kept out of the TUI entirely: an agent asking for
+/// somewhere to work should not have to open one.
+fn run_worktree(args: &[String]) -> io::Result<()> {
+    let mut words: Vec<&str> = Vec::new();
+    let mut root = None;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        if arg == IN_FLAG {
+            root = rest.next().cloned();
+        } else {
+            words.push(arg);
+        }
+    }
+
+    let root = root.map_or_else(cwd, std::path::PathBuf::from);
+    let Ok(repo) = git2::Repository::discover(&root) else {
+        eprintln!("atrium worktree: {} is not inside a git repository", root.display());
+        std::process::exit(1);
+    };
+
+    match words.first().copied() {
+        Some("list") => {
+            for path in worktree::list(&repo).unwrap_or_default() {
+                println!("{}", path.display());
+            }
+            Ok(())
+        },
+        Some("new") => {
+            let Some(name) = words.get(1) else {
+                eprintln!("atrium worktree new: needs a name, which becomes the branch too");
+                std::process::exit(2);
+            };
+            let path = match worktree::root_of(&repo) {
+                Ok(repo_root) => worktree::default_path(&repo_root, name),
+                Err(error) => {
+                    eprintln!("atrium worktree new: {}", error.message());
+                    std::process::exit(1);
+                },
+            };
+            match worktree::create(&repo, name, &path) {
+                Ok(path) => {
+                    // Waited for rather than spawned: this process is about to
+                    // exit, and would take the announcement down with it.
+                    notify::worktree_created_now(&path);
+                    println!("{}", path.display());
+                    Ok(())
+                },
+                Err(error) => {
+                    eprintln!("atrium worktree new: {}", error.message());
+                    std::process::exit(1);
+                },
+            }
+        },
+        _ => {
+            eprintln!("atrium worktree: new <NAME>, or list. --in PATH picks the repository.");
+            std::process::exit(2);
+        },
+    }
+}
+
 fn run_tui(spec: Option<AgentSpec>, config: Config) -> io::Result<()> {
     let mut terminal = ratatui::init();
     // ratatui does not turn this on, and without it a paste arrives as a burst
@@ -174,6 +242,7 @@ fn main() -> io::Result<()> {
             check_config();
             return Ok(());
         },
+        Some(WORKTREE_SUBCOMMAND) => return run_worktree(&args[1..]),
         Some(PROFILE_FLAG) => return run_profile(args.get(1), Config::load()),
         _ => {},
     }

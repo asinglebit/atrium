@@ -23,14 +23,16 @@ use crate::{
         },
     },
     core::{
-        agent::{Agent, AgentSpec, Harness},
+        agent::{Agent, AgentSpec, Harness, Status},
         config::Config,
         installed::Found,
         layout_config::{self, LayoutConfig},
+        notify,
         profile::Profile,
         profiles_file::{self, StoredProfiles},
         projects,
-        registry::Registry,
+        registry::{Counts, Registry},
+        tmux, worktree,
     },
     helpers::{
         palette::{self, THEME_PRESETS, Theme},
@@ -82,6 +84,15 @@ pub struct App {
     /// The last layout drawn, which is what a click is measured against.
     layout: Layout,
     last_git: Instant,
+    /// The pane atrium is drawing in, when it is drawing in one at all.
+    tmux_pane: Option<String>,
+    /// The last thing said to tmux, so it is only said again once it changes.
+    /// None until the first frame, which is what makes a fresh atrium clear a
+    /// value left in this pane by one that was killed rather than quit.
+    published: Option<(Option<Status>, Counts)>,
+    /// What each repository's worktrees looked like last time, so one that
+    /// appears without anyone saying so is still noticed.
+    watch: worktree::Watch,
     should_quit: bool,
 }
 
@@ -159,6 +170,9 @@ impl App {
             dragging_sidebar: false,
             layout: layout::compute(Rect::new(0, 0, cols, rows), true, sidebar_width),
             last_git: Instant::now(),
+            tmux_pane: tmux::pane(),
+            published: None,
+            watch: worktree::Watch::new(),
             should_quit: false,
         })
     }
@@ -172,8 +186,10 @@ impl App {
                 self.registry.apply(&report);
             }
             self.registry.refresh();
+            self.announce();
             if self.last_git.elapsed() >= GIT_INTERVAL {
                 self.registry.refresh_git();
+                self.notice_worktrees();
                 self.last_git = Instant::now();
             }
 
@@ -190,7 +206,36 @@ impl App {
                 }
             }
         }
+        // A pane that no longer holds an atrium should not still be saying
+        // what one needs.
+        if let Some(pane) = &self.tmux_pane {
+            tmux::publish(pane, None, Counts::default());
+        }
         Ok(())
+    }
+
+    /// Tell the pane what this atrium needs, and only when that has changed:
+    /// saying it every frame would be a process every sixteen milliseconds.
+    fn announce(&mut self) {
+        let Some(pane) = &self.tmux_pane else {
+            return;
+        };
+        let now = (self.registry.aggregate(), self.registry.counts());
+        if self.published.as_ref() == Some(&now) {
+            return;
+        }
+        tmux::publish(pane, now.0, now.1);
+        self.published = Some(now);
+    }
+
+    /// A worktree made by something that never said so -- guitar with no hook
+    /// set, a bare `git worktree add` -- is still worth announcing. Only the
+    /// repositories the held agents stand in are watched, which is the most
+    /// atrium can claim to know about.
+    fn notice_worktrees(&mut self) {
+        for path in self.watch.tick(&self.registry.repos()) {
+            notify::worktree_created(&path);
+        }
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
