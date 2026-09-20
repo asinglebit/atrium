@@ -1,7 +1,7 @@
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Style},
+    style::Style,
     symbols::border,
     text::{Line, Span},
     widgets::{Block, Borders, ListItem, Padding, Scrollbar, ScrollbarOrientation, ScrollbarState},
@@ -92,16 +92,34 @@ pub fn draw_gutter(frame: &mut Frame, area: Rect, theme: &Theme, total: usize, v
     frame.render_stateful_widget(scrollbar, area, &mut ScrollbarState::new(length).position(offset));
 }
 
-/// What each status is painted in, drawn from guitar's palette rather than
-/// colours of atrium's own, so the two tools never disagree about what red is.
-pub fn status_color(theme: &Theme, status: Status) -> Color {
-    match status {
-        Status::Idle => theme.COLOR_GREY_400,
-        Status::Working => theme.COLOR_AMBER,
-        Status::NeedsInput => theme.COLOR_GREEN,
-        Status::Error => theme.COLOR_RED,
-        Status::Exited => theme.COLOR_GREY_600,
-    }
+/// How each status is drawn. The colours are drawn from guitar's palette rather
+/// than colours of atrium's own, so the two tools never disagree about what red
+/// is, and tmuxbar paints a window by the same rule -- blue for a question,
+/// orange for a wait, green for a finished agent, red for a failed one.
+///
+/// The two statuses that are still waiting pulse: on the dark half of the beat
+/// they drop to grey, which is `lit` being false. The other three are settled --
+/// nothing about them will change on its own -- so they ignore it and hold
+/// their colour.
+///
+/// The pulse is drawn rather than asked for. `Modifier::SLOW_BLINK` emits SGR 5,
+/// which ghostty parses and ignores, so anything that has to blink here has to
+/// blink by being drawn two ways.
+pub fn status_style(theme: &Theme, status: Status, lit: bool) -> Style {
+    let (color, pulses) = match status {
+        Status::Idle => (theme.COLOR_GREEN, false),
+        Status::Working => (theme.COLOR_ORANGE, true),
+        Status::NeedsInput => (theme.COLOR_BLUE, true),
+        Status::Error => (theme.COLOR_RED, false),
+        Status::Exited => (theme.COLOR_GREY_600, false),
+    };
+    Style::default().fg(if pulses && !lit { theme.COLOR_GREY_600 } else { color })
+}
+
+/// The `_` a text field is waiting behind, on the lit half of the pulse and the
+/// dark one. A space rather than nothing, so the line does not shift under it.
+pub fn cursor(lit: bool) -> &'static str {
+    if lit { "_" } else { " " }
 }
 
 /// However long the branches are, a name never gets squeezed below this.
@@ -109,7 +127,7 @@ const MIN_NAME_WIDTH: usize = 8;
 
 /// One line per held agent: status mark, jump number, name, and branch. Shared
 /// so the sidebar and the goto list cannot drift apart.
-pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, width: usize) -> Vec<Line<'a>> {
+pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, lit: bool, width: usize) -> Vec<Line<'a>> {
     let branches: Vec<String> = registry.agents().iter().map(|agent| agent.git().map(|git| format!("{}{}", git.branch, if git.dirty { "*" } else { "" })).unwrap_or_default()).collect();
     let profiles: Vec<String> = registry.agents().iter().map(|agent| agent.profile.clone().unwrap_or_default()).collect();
 
@@ -146,7 +164,7 @@ pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, width:
             let body = if agent.has_exited() { theme.COLOR_GREY_600 } else { theme.COLOR_GREY_300 };
 
             let mut spans = vec![
-                Span::styled(format!("{mark} "), Style::default().fg(status_color(theme, agent.status))),
+                Span::styled(format!("{mark} "), status_style(theme, agent.status, lit)),
                 Span::styled(key, Style::default().fg(theme.COLOR_GREY_600)),
                 Span::styled(format!("{:<name_width$}", truncate(&agent.name, name_width)), Style::default().fg(body)),
             ];

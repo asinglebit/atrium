@@ -20,7 +20,7 @@ const WIDTH: u16 = 50;
 const MAX_ROWS: u16 = 12;
 
 /// The "which one" box: every held agent, jumpable by its own number.
-pub fn draw(frame: &mut Frame, full: Rect, goto: &Goto, registry: &Registry, theme: &Theme, spinner: char) {
+pub fn draw(frame: &mut Frame, full: Rect, goto: &Goto, registry: &Registry, theme: &Theme, spinner: char, lit: bool) {
     let rows = (registry.len() as u16).min(MAX_ROWS);
     let area = layout::centered(WIDTH, rows + 3, full);
     // Without this the stage shows through the gaps in the modal.
@@ -32,7 +32,7 @@ pub fn draw(frame: &mut Frame, full: Rect, goto: &Goto, registry: &Registry, the
 
     let [list_area, footer] = layout::stack_footer(inner, 1);
 
-    let lines = pane::agent_lines(registry, theme, spinner, list_area.width as usize);
+    let lines = pane::agent_lines(registry, theme, spinner, lit, list_area.width as usize);
     let items = pane::zebra_list_items(lines, list_area.height as usize, goto.selected(), true, theme);
     frame.render_widget(List::new(items), list_area);
 

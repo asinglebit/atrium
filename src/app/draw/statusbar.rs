@@ -9,11 +9,11 @@ use crate::{app::state::layout::Layout, core::registry::Registry, helpers::palet
 
 /// The line under the frame: which agent is showing and where it sits in the
 /// list, in the same shape guitar uses.
-pub fn draw(frame: &mut Frame, layout: &Layout, registry: &Registry, theme: &Theme, pending: Option<&str>) {
+pub fn draw(frame: &mut Frame, layout: &Layout, registry: &Registry, theme: &Theme, lit: bool, pending: Option<&str>) {
     let mut left = vec![Span::raw("  ")];
     if let Some(agent) = registry.focused() {
         left.push(Span::styled(format!("{} ", agent.name), Style::default().fg(theme.COLOR_TEXT)));
-        left.push(Span::styled(agent.status.label(), Style::default().fg(crate::app::draw::pane::status_color(theme, agent.status))));
+        left.push(Span::styled(agent.status.label(), crate::app::draw::pane::status_style(theme, agent.status, lit)));
         if let Some(git) = agent.git() {
             let dirty = if git.dirty { "*" } else { "" };
             left.push(Span::styled(format!("  ● {}{dirty}", git.branch), Style::default().fg(theme.COLOR_GRASS)));

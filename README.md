@@ -170,7 +170,16 @@ clear anything, and the stale value stands until something takes the pane.
 
 Nothing reads these but whatever you point at them. [tmuxbar][] colours each
 window by the worst thing the atriums in it need, which is a format string over
-the window's own panes rather than anything that polls.
+the window's own panes rather than anything that polls. It paints them the way
+the sidebar does — blue and pulsing for an agent waiting on you, orange and
+pulsing while it works, steady green when it is done, steady red when it failed
+— reading the same `theme.json`, so a window name and the row it stands for are
+never two different colours.
+
+The pulse is the third option, `@atrium_blink`, and the only one said on a timer.
+tmux repaints its status line only when asked and ghostty ignores the terminal's
+own blink attribute, so a window cannot blink by itself; atrium keeps the beat
+while it holds an agent that is working or waiting, and stops when it does not.
 
 [tmuxbar]: https://github.com/asinglebit/tmux
 
@@ -503,9 +512,9 @@ two functions changed. `theme_path()` reads atrium's own `theme.json` if there
 is one and **guitar's otherwise**, so retheme guitar and atrium follows with
 nothing to configure. `save_theme()` always writes atrium's own path — picking a
 theme in atrium's settings must not retheme guitar behind its back, which is
-exactly what the unmodified function would have done. Statuses map onto that palette (`COLOR_RED`, `COLOR_AMBER`,
-`COLOR_GREEN`) rather than carrying colours of their own, so the two tools can
-never disagree about what red is.
+exactly what the unmodified function would have done. Statuses map onto that palette (`COLOR_RED`, `COLOR_ORANGE`,
+`COLOR_BLUE`, `COLOR_GREEN`) rather than carrying colours of their own, so the
+two tools can never disagree about what red is.
 
 **A pane carries no title, because the title costs the top row.** The sidebar
 used to be headed `agents 3`; the status line already says `2/3`, so the row was

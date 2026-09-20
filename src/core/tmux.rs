@@ -18,6 +18,12 @@ pub const STATUS_OPTION: &str = "@atrium_status";
 /// How many agents are held and what they are doing, for the bar segment.
 pub const AGENTS_OPTION: &str = "@atrium_agents";
 
+/// Which half of the pulse the bar should be drawing. Global rather than set on
+/// the pane, because every window that holds a waiting agent beats together and
+/// a window format resolves an option up the pane, window, session, global
+/// chain to find it.
+pub const BLINK_OPTION: &str = "@atrium_blink";
+
 /// The pane atrium is drawing in, when it is drawing in one at all.
 pub fn pane() -> Option<String> {
     pane_from(std::env::var_os(SERVER_ENV), std::env::var_os(PANE_ENV))
@@ -62,6 +68,20 @@ pub fn publish_args(pane: &str, status: Option<Status>, counts: Counts) -> Vec<S
     args
 }
 
+/// One beat, in the shape `publish_args` uses: the value and the repaint in a
+/// single invocation.
+///
+/// tmuxbar cannot keep this time itself. Its status line repaints only when
+/// something asks it to, and the terminal's own blink attribute is ignored by
+/// ghostty -- so the pulse has to be drawn, and the thing that knows an agent is
+/// waiting is the thing already talking to tmux.
+pub fn pulse_args(lit: bool) -> Vec<String> {
+    let mut args: Vec<String> = ["set-option", "-g", BLINK_OPTION, if lit { "1" } else { "0" }].iter().map(|arg| (*arg).to_owned()).collect();
+    args.push(";".to_owned());
+    args.extend(["refresh-client".to_owned(), "-S".to_owned()]);
+    args
+}
+
 /// Setting one pane option, or clearing it when there is nothing to say.
 fn set_args(pane: &str, option: &str, value: Option<&str>) -> Vec<String> {
     let mut args: Vec<String> = ["set-option", "-p"].iter().map(|arg| (*arg).to_owned()).collect();
@@ -78,7 +98,18 @@ fn set_args(pane: &str, option: &str, value: Option<&str>) -> Vec<String> {
 /// Say what this atrium needs. Never fails loudly -- an atrium that cannot
 /// reach tmux is not a broken atrium.
 pub fn publish(pane: &str, status: Option<Status>, counts: Counts) {
-    let _ = Command::new("tmux").args(publish_args(pane, status, counts)).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    run(publish_args(pane, status, counts));
+}
+
+/// Hand the bar the half of the beat it should be drawing.
+pub fn pulse(lit: bool) {
+    run(pulse_args(lit));
+}
+
+/// One tmux invocation, with nothing said about how it went: an atrium that
+/// cannot reach tmux is not a broken atrium.
+fn run(args: Vec<String>) {
+    let _ = Command::new("tmux").args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
 }
 
 #[cfg(test)]

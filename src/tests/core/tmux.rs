@@ -59,3 +59,20 @@ fn the_commands_are_separated_the_way_tmux_separates_them() {
     let args = publish_args("%3", Some(Status::Idle), counts(1, 0, 0, 0));
     assert_eq!(args.iter().filter(|arg| *arg == ";").count(), 2, "three commands need two separators");
 }
+
+#[test]
+fn a_beat_sets_the_option_globally_and_repaints() {
+    let args = pulse_args(true);
+
+    assert_eq!(args[..4], ["set-option", "-g", BLINK_OPTION, "1"]);
+    assert!(args.contains(&";".to_owned()), "the repaint rides in the same invocation");
+    assert!(args.ends_with(&["refresh-client".to_owned(), "-S".to_owned()]), "without this the window would not repaint until status-interval");
+}
+
+#[test]
+fn the_dark_half_is_the_only_thing_that_says_zero() {
+    // tmuxbar dims on an explicit 0 and lights on anything else, unset
+    // included, so a stopped pulse can never leave a window dimmed.
+    assert!(pulse_args(false).contains(&"0".to_owned()));
+    assert!(!pulse_args(true).contains(&"0".to_owned()));
+}

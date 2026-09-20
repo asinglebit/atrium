@@ -14,10 +14,11 @@ Written onto the pane atrium is drawing in, which it finds from `$TMUX_PANE`.
 `$TMUX` is checked beside it, so a stale `TMUX_PANE` inherited outside tmux
 cannot aim at somebody else's pane.
 
-| Option | Value |
-| --- | --- |
-| `@atrium_status` | `idle`, `working`, `needs-input` or `error` |
-| `@atrium_agents` | `<held> <working> <needs> <error>` |
+| Option | Scope | Value |
+| --- | --- | --- |
+| `@atrium_status` | pane | `idle`, `working`, `needs-input` or `error` |
+| `@atrium_agents` | pane | `<held> <working> <needs> <error>` |
+| `@atrium_blink` | server | `1` or `0`, the half of the pulse to draw |
 
 The status is the **worst** of what the held agents are doing, ordered
 `error > needs-input > working > idle`.
@@ -31,6 +32,31 @@ survive the split. The label is for reading; this is for matching.
 `Exited` is never published. A row that has finished is not something to be
 pulled back to, and an atrium holding nothing but dead agents needs nothing at
 all — both options are cleared rather than set to anything.
+
+## Keeping the beat
+
+`@atrium_blink` is the one thing here said on a timer rather than on a change,
+and the one thing set on the server rather than on the pane: every window that
+holds a waiting agent beats together, and a window format finds a global option
+by walking up from the pane.
+
+It exists because nothing else can keep that time. tmux repaints its status line
+only when asked, and the terminal's own blink attribute is ignored by ghostty —
+so a window cannot pulse unless something asks for a repaint twice a second, and
+only an atrium knows there is an agent still waiting to pulse about.
+
+So the beat runs **only while this atrium's published status is `working` or
+`needs-input`**, which is exactly the two [[Status|statuses]] tmuxbar draws in a
+pulsing colour. Nothing waiting, nothing ticking: an atrium holding finished
+agents costs a tmux invocation only when something changes, as before.
+
+It always stops **lit**. tmuxbar dims on an explicit `0` and lights on anything
+else — `1`, and an option never set at all — so a beat that ends mid-cycle,
+or an atrium killed before it could stop cleanly, leaves a window that has
+stopped moving rather than one greyed out.
+
+The phase is read off the wall clock, so two atriums on one server write the
+same value at the same moment instead of fighting over it with two rhythms.
 
 ## When it is said
 

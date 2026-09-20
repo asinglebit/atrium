@@ -19,7 +19,7 @@ const HEIGHT: u16 = 16;
 
 /// The "hold something new" box: a filter, the CLI to launch, and the projects
 /// still matching.
-pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker, theme: &Theme) {
+pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker, theme: &Theme, lit: bool) {
     let area = layout::centered(WIDTH, HEIGHT, full);
     // Without this the stage shows through the gaps in the modal.
     frame.render_widget(Clear, area);
@@ -31,7 +31,7 @@ pub fn draw(frame: &mut Frame, full: Rect, picker: &Picker, theme: &Theme) {
     let [header, list_area] = layout::stack_header(inner, 2);
 
     let header_lines = vec![
-        Line::from(vec![Span::raw("> "), Span::raw(picker.filter()), Span::styled("_", Style::default().add_modifier(Modifier::SLOW_BLINK))]),
+        Line::from(vec![Span::raw("> "), Span::raw(picker.filter()), Span::raw(pane::cursor(lit))]),
         Line::from(vec![
             Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" "),

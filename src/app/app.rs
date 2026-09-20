@@ -93,6 +93,10 @@ pub struct App {
     /// None until the first frame, which is what makes a fresh atrium clear a
     /// value left in this pane by one that was killed rather than quit.
     published: Option<(Option<Status>, Counts)>,
+    /// The half of the pulse tmux was last told about, so a beat costs one
+    /// invocation rather than one per frame. None while nothing is waiting,
+    /// which is when the pulse is not running at all.
+    pulsed: Option<bool>,
     /// What each repository's worktrees looked like last time, so one that
     /// appears without anyone saying so is still noticed.
     watch: worktree::Watch,
@@ -179,6 +183,7 @@ impl App {
             last_git: Instant::now(),
             tmux_pane: tmux::pane(),
             published: None,
+            pulsed: None,
             watch: worktree::Watch::new(),
             action_mode: false,
             should_quit: false,
@@ -195,6 +200,7 @@ impl App {
             }
             self.registry.refresh();
             self.announce();
+            self.pulse();
             if self.last_git.elapsed() >= GIT_INTERVAL {
                 self.registry.refresh_git();
                 self.notice_worktrees();
@@ -215,9 +221,11 @@ impl App {
             }
         }
         // A pane that no longer holds an atrium should not still be saying
-        // what one needs.
+        // what one needs, and a bar told to draw the dark half of a beat that
+        // has stopped would hold that window dim forever.
         if let Some(pane) = &self.tmux_pane {
             tmux::publish(pane, None, Counts::default());
+            self.stop_pulsing();
         }
         Ok(())
     }
@@ -236,6 +244,42 @@ impl App {
         self.published = Some(now);
     }
 
+    /// Keep time for the window tmuxbar draws this atrium in, one invocation per
+    /// half beat. tmux repaints its status line only when asked, so a window
+    /// cannot pulse unless something asks on a timer -- and only an atrium knows
+    /// there is an agent still waiting to pulse about.
+    ///
+    /// The beat comes off the wall clock rather than this process' uptime, so
+    /// two atriums on one server light up together instead of fighting over the
+    /// option with two rhythms.
+    fn pulse(&mut self) {
+        if self.tmux_pane.is_none() {
+            return;
+        }
+        // Exactly the two statuses tmuxbar draws in a pulsing colour. Anything
+        // else is settled, and a settled window has nothing to repaint for.
+        if !matches!(self.published, Some((Some(Status::Working | Status::NeedsInput), _))) {
+            self.stop_pulsing();
+            return;
+        }
+        let lit = spinner::pulse_now();
+        if self.pulsed == Some(lit) {
+            return;
+        }
+        tmux::pulse(lit);
+        self.pulsed = Some(lit);
+    }
+
+    /// Stop on the lit half, never the dark one. A pulse that ends mid-beat
+    /// would leave the window it was pulsing dimmed for as long as the value
+    /// stands.
+    fn stop_pulsing(&mut self) {
+        if self.pulsed == Some(false) {
+            tmux::pulse(true);
+        }
+        self.pulsed = None;
+    }
+
     /// A worktree made by something that never said so -- guitar with no hook
     /// set, a bare `git worktree add` -- is still worth announcing. Only the
     /// repositories the held agents stand in are watched, which is the most
@@ -250,6 +294,7 @@ impl App {
         let layout = self.layout_for(frame.area());
         self.layout = layout;
         let spinner = spinner::frame_at(self.started.elapsed());
+        let lit = spinner::pulse_now();
 
         // The agent paints its own cells; this is what colours everything it
         // does not reach, so the chrome matches guitar rather than the terminal.
@@ -278,25 +323,25 @@ impl App {
             } else {
                 if let Some(area) = layout.sidebar {
                     self.sidebar_scroll = scroll::trap(self.registry.focus(), self.sidebar_scroll, self.registry.len(), area.height as usize);
-                    draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, self.sidebar_scroll);
+                    draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, lit, self.sidebar_scroll);
                 }
                 if let Some(agent) = self.registry.focused() {
                     draw::stage::draw(frame, layout.stage, agent.session(), &self.theme);
                 }
             }
             let pending = self.action_mode.then(|| self.keymap.action.label());
-            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme, pending.as_deref());
+            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme, lit, pending.as_deref());
         }
 
         match &self.modal {
-            Some(Modal::NewAgent(picker)) => draw::modals::new_agent::draw(frame, frame.area(), picker, &self.theme),
-            Some(Modal::Goto(goto)) => draw::modals::goto::draw(frame, frame.area(), goto, &self.registry, &self.theme, spinner),
+            Some(Modal::NewAgent(picker)) => draw::modals::new_agent::draw(frame, frame.area(), picker, &self.theme, lit),
+            Some(Modal::Goto(goto)) => draw::modals::goto::draw(frame, frame.area(), goto, &self.registry, &self.theme, spinner, lit),
             None => {},
         }
 
         if let Some(editor) = &self.profile_editor {
             let name = Editor::name_of(&self.stored_profiles, self.editing_index());
-            draw::modals::profile::draw(frame, frame.area(), editor, &name, &self.theme);
+            draw::modals::profile::draw(frame, frame.area(), editor, &name, &self.theme, lit);
         }
 
         // Last, so it floats over whatever was right-clicked.

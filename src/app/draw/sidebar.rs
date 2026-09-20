@@ -7,7 +7,7 @@ use ratatui::{
 use crate::{app::draw::pane, core::registry::Registry, helpers::palette::Theme};
 
 /// Draws the held agents, striped and highlighted the way guitar's panes are.
-pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry, theme: &Theme, spinner: char, offset: usize) {
+pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry, theme: &Theme, spinner: char, lit: bool, offset: usize) {
     let split = area.width.saturating_sub(1);
     let body = Rect { width: split, ..area };
     let gutter = Rect { x: area.x + split, width: 1, ..area };
@@ -17,7 +17,7 @@ pub fn draw(frame: &mut Frame, area: Rect, registry: &Registry, theme: &Theme, s
     frame.render_widget(block, body);
 
     let visible = inner.height as usize;
-    let lines = pane::agent_lines(registry, theme, spinner, inner.width as usize);
+    let lines = pane::agent_lines(registry, theme, spinner, lit, inner.width as usize);
     let shown: Vec<_> = lines.into_iter().skip(offset).collect();
     let selected = registry.focus().saturating_sub(offset);
 

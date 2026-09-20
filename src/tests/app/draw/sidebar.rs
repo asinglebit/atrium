@@ -20,7 +20,7 @@ fn registry_of(dirs: &[&str]) -> Registry {
 
 fn rendered(registry: &Registry) -> String {
     let mut terminal = Terminal::new(TestBackend::new(26, 6)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), registry, &Theme::classic(), '.', 0)).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), registry, &Theme::classic(), '.', true, 0)).expect("draw");
     terminal.backend().buffer().content().chunks(26).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -90,7 +90,7 @@ fn branches_share_one_right_aligned_column() {
     }
 
     let mut terminal = Terminal::new(TestBackend::new(40, 5)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), &registry, &Theme::classic(), '.', 0)).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), &registry, &Theme::classic(), '.', true, 0)).expect("draw");
     let rows: Vec<String> = terminal.backend().buffer().content().chunks(40).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect();
 
     // Rows 0 and 1 are the two agents; their branches must end at the same column.

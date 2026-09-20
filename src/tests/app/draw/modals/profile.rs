@@ -7,7 +7,7 @@ use ratatui::{Terminal, backend::TestBackend};
 
 fn rendered(editor: &Editor, name: &str) -> String {
     let mut terminal = Terminal::new(TestBackend::new(70, 20)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), editor, name, &Theme::classic())).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), editor, name, &Theme::classic(), true)).expect("draw");
     terminal.backend().buffer().content().chunks(70).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -78,5 +78,5 @@ fn the_box_is_bordered_so_it_reads_as_floating() {
 #[test]
 fn it_fits_a_terminal_too_small_for_it() {
     let mut terminal = Terminal::new(TestBackend::new(10, 4)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), &Editor::manage(0), "work", &Theme::classic())).expect("should not panic on a small frame");
+    terminal.draw(|frame| draw(frame, frame.area(), &Editor::manage(0), "work", &Theme::classic(), true)).expect("should not panic on a small frame");
 }

@@ -16,7 +16,7 @@ fn picker_of(names: &[&str]) -> Picker {
 
 fn rendered(picker: &Picker) -> String {
     let mut terminal = Terminal::new(TestBackend::new(70, 20)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), picker, &Theme::classic())).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), picker, &Theme::classic(), true)).expect("draw");
     terminal.backend().buffer().content().chunks(70).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -54,7 +54,7 @@ fn it_says_so_when_nothing_matches() {
 fn it_fits_a_terminal_too_small_for_it() {
     let mut terminal = Terminal::new(TestBackend::new(20, 6)).expect("test terminal");
     let picker = picker_of(&["atrium"]);
-    terminal.draw(|frame| draw(frame, frame.area(), &picker, &Theme::classic())).expect("should not panic on a small frame");
+    terminal.draw(|frame| draw(frame, frame.area(), &picker, &Theme::classic(), true)).expect("should not panic on a small frame");
 }
 
 #[test]

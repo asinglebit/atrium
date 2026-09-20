@@ -1,7 +1,7 @@
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Clear, Paragraph},
 };
@@ -25,11 +25,11 @@ const UNSELECTED: &str = " ";
 
 /// Editing a profile: an action list, a prompt, or a confirmation, whichever
 /// step the editor is on.
-pub fn draw(frame: &mut Frame, full: Rect, editor: &Editor, name: &str, theme: &Theme) {
+pub fn draw(frame: &mut Frame, full: Rect, editor: &Editor, name: &str, theme: &Theme, lit: bool) {
     let (title, mut lines) = match &editor.step {
         Step::Actions { selected, .. } => (" profile ", actions(*selected, name, theme)),
         Step::ConfirmDelete { .. } => (" delete profile ", confirm(name, theme)),
-        Step::Asking { prompt, input } => (" profile ", asking(prompt.title(), input, theme)),
+        Step::Asking { prompt, input } => (" profile ", asking(prompt.title(), input, theme, lit)),
     };
 
     // A refusal stays in the modal, so another answer can be given without
@@ -75,14 +75,14 @@ fn confirm(name: &str, theme: &Theme) -> Vec<Line<'static>> {
     ]
 }
 
-fn asking(title: &str, input: &str, theme: &Theme) -> Vec<Line<'static>> {
+fn asking(title: &str, input: &str, theme: &Theme, lit: bool) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::from(Span::styled(title.to_owned(), Style::default().fg(theme.COLOR_GREY_600))),
         Line::default(),
         Line::from(vec![
             Span::styled("> ", Style::default().fg(theme.COLOR_GREY_600)),
             Span::styled(truncate_with_ellipsis(input, WIDTH as usize - 6), Style::default().fg(theme.COLOR_TEXT)),
-            Span::styled("_", Style::default().add_modifier(Modifier::SLOW_BLINK)),
+            Span::raw(pane::cursor(lit)),
         ]),
         Line::default(),
     ];

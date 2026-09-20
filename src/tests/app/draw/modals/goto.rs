@@ -18,7 +18,7 @@ fn registry_of(dirs: &[&str]) -> Registry {
 
 fn rendered(registry: &Registry, goto: &Goto) -> String {
     let mut terminal = Terminal::new(TestBackend::new(60, 14)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), goto, registry, &Theme::classic(), '.')).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), goto, registry, &Theme::classic(), '.', true)).expect("draw");
     terminal.backend().buffer().content().chunks(60).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -44,5 +44,5 @@ fn it_fits_a_terminal_too_small_for_it() {
     let registry = registry_of(&["/tmp", "/usr"]);
     let goto = Goto::new(2, 0);
     let mut terminal = Terminal::new(TestBackend::new(16, 4)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), &goto, &registry, &Theme::classic(), '.')).expect("should not panic on a small frame");
+    terminal.draw(|frame| draw(frame, frame.area(), &goto, &registry, &Theme::classic(), '.', true)).expect("should not panic on a small frame");
 }
