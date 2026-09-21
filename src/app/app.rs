@@ -220,13 +220,6 @@ impl App {
                 }
             }
         }
-        // A pane that no longer holds an atrium should not still be saying
-        // what one needs, and a bar told to draw the dark half of a beat that
-        // has stopped would hold that window dim forever.
-        if let Some(pane) = &self.tmux_pane {
-            tmux::publish(pane, None, Counts::default());
-            self.stop_pulsing();
-        }
         Ok(())
     }
 
@@ -1017,5 +1010,23 @@ impl App {
             },
             _ => Ok(()),
         }
+    }
+}
+
+/// A pane that no longer holds an atrium should not still be saying what one
+/// needs, and a bar told to draw the dark half of a beat that has stopped would
+/// hold that window dim forever.
+///
+/// Here rather than at the end of `run`, because every `?` in the draw loop --
+/// and a panic on the way through it -- leaves by a door that never reaches the
+/// bottom of it. A `kill` still clears nothing, and a pane that closes takes its
+/// own options with it.
+impl Drop for App {
+    fn drop(&mut self) {
+        let Some(pane) = &self.tmux_pane else {
+            return;
+        };
+        tmux::publish(pane, None, Counts::default());
+        self.stop_pulsing();
     }
 }

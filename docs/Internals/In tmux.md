@@ -63,12 +63,16 @@ same value at the same moment instead of fighting over it with two rhythms.
 **Only when it changes.** Saying it every frame would be a process every sixteen
 milliseconds. The first frame always says it, which is what makes a fresh atrium
 clear a value left in that pane by one that was killed rather than quit, and
-quitting clears it on the way out.
+going away clears it on the way out.
 
-Killed with `SIGKILL` atrium clears nothing, and the stale value stands until
-something else takes the pane. That is the same trade the [[Adapters and hooks|socket]]
-makes with its stale `.sock` files, and it is swept the same way:
-by the next thing to come along.
+Clearing is in `Drop` rather than at the end of the draw loop, so it happens
+whatever ends the loop — a quit, an error out of a `?`, or a panic unwinding
+through it. Only a signal gets past it: killed, atrium clears nothing, and the
+stale value stands until something else takes the pane. A pane that closes takes
+its own options with it, so what this leaves open is an atrium killed in a pane
+you keep. That is the same trade the [[Adapters and hooks|socket]] makes with
+its stale `.sock` files, and it is swept the same way: by the next thing to come
+along.
 
 ## One invocation, not three
 
