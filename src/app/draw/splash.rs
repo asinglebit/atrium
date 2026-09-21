@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ratatui::{
     Frame,
     layout::Rect,
@@ -47,15 +49,12 @@ pub fn first_row(area: Rect, splash: &Splash, count: usize) -> u16 {
 /// What atrium shows when it is holding nothing: the wordmark, and what it
 /// could hold. Guitar's splash, with the recent repositories replaced by the
 /// profiles -- see `Profiles` in the docs.
-pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile], theme: &Theme, keymap: &Keymap) {
+pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile], theme: &Theme, keymap: &Keymap, elapsed: Duration) {
     let rows = logo::splash_rows_for(area.width as usize);
     // An empty list is still one row: the line saying there is nothing to hold.
     let mut lines: Vec<Line> = (0..padding(area, splash, profiles.len().max(1))).map(|_| Line::default()).collect();
 
-    for (index, row) in rows.iter().enumerate() {
-        let colour = logo::tone(index, rows, theme);
-        lines.push(Line::from(Span::styled(*row, Style::default().fg(colour))).centered());
-    }
+    lines.extend(logo::lines(rows, theme, elapsed).into_iter().map(Line::centered));
 
     lines.push(Line::default());
     lines.push(Line::from(Span::styled(HEADING, Style::default().fg(theme.COLOR_TEXT))).centered());

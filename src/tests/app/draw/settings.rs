@@ -16,7 +16,7 @@ fn found() -> Vec<Found> {
 }
 
 fn context<'a>(theme: &'a Theme, keymap: &'a Keymap, profiles: &'a StoredProfiles, installed: &'a [Found]) -> Context<'a> {
-    Context { keymap, theme, profiles, installed, default_profile: 0, socket: Path::new("/run/user/1000/atrium/1.sock") }
+    Context { keymap, theme, profiles, installed, default_profile: 0, socket: Path::new("/run/user/1000/atrium/1.sock"), elapsed: Duration::ZERO }
 }
 
 /// Draws and hands back what was painted, keeping whatever the draw recorded on

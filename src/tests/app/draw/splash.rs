@@ -2,7 +2,7 @@ use super::*;
 
 use crate::app::input::keymap::Keymap;
 use crate::core::profile::Profile;
-use ratatui::{Terminal, backend::TestBackend};
+use ratatui::{Terminal, backend::TestBackend, style::Color};
 
 fn harnesses() -> Vec<Profile> {
     vec![
@@ -17,8 +17,14 @@ fn rendered(splash: &Splash, width: u16, height: u16) -> String {
 }
 
 fn rendered_with(splash: &Splash, profiles: &[Profile], width: u16, height: u16) -> String {
+    rendered_at(splash, profiles, width, height, Duration::ZERO)
+}
+
+/// The splash as it stands after `elapsed`. At rest the wordmark is the art as
+/// it was drawn, which is what every check here is written against.
+fn rendered_at(splash: &Splash, profiles: &[Profile], width: u16, height: u16, elapsed: Duration) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), splash, profiles, &Theme::classic(), &Keymap::default())).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), splash, profiles, &Theme::classic(), &Keymap::default(), elapsed)).expect("draw");
     terminal.backend().buffer().content().chunks(width as usize).map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
 }
 
@@ -131,23 +137,41 @@ fn it_fits_a_frame_too_small_for_it() {
 }
 
 #[test]
+fn the_wordmark_is_alive() {
+    let splash = Splash::new(3, 0);
+    let at_rest = rendered(&splash, 130, 40);
+
+    // Somewhere in a sweep the light has both moved characters and moved the
+    // tints under them; a still picture would match at every instant.
+    assert!((1..40).any(|step| rendered_at(&splash, &harnesses(), 130, 40, Duration::from_millis(step * 130)) != at_rest), "the wordmark never moved:\n{at_rest}");
+}
+
+#[test]
 fn the_wordmark_lightens_at_the_top() {
     let theme = Theme::classic();
     let profiles = harnesses();
     let splash = Splash::new(3, 0);
 
     let mut terminal = Terminal::new(TestBackend::new(80, 30)).expect("test terminal");
-    terminal.draw(|frame| draw(frame, frame.area(), &splash, &profiles, &theme, &Keymap::default())).expect("draw");
+    terminal.draw(|frame| draw(frame, frame.area(), &splash, &profiles, &theme, &Keymap::default(), Duration::ZERO)).expect("draw");
 
     let buffer = terminal.backend().buffer();
-    let rows_with = |colour| (0..30).filter(|row| (0..80).any(|column| buffer[(column, *row)].fg == colour && buffer[(column, *row)].symbol() != " ")).collect::<Vec<u16>>();
+    // The wordmark is lit from a ramp mixed out of the palette's purple rather than from two named
+    // colours, so the check is on which rows read lighter, not on which token they were painted in.
+    let lightness = |colour| match colour {
+        Color::Rgb(red, green, blue) => Some(0.299 * f32::from(red) + 0.587 * f32::from(green) + 0.114 * f32::from(blue)),
+        _ => None,
+    };
+    let lit: Vec<(u16, f32)> = (0..30)
+        .filter_map(|row| {
+            let cell = (0..80).find(|column| buffer[(*column, row)].symbol() != " ")?;
+            Some((row, lightness(buffer[(cell, row)].fg)?))
+        })
+        .collect();
 
-    let pink = rows_with(theme.COLOR_PINK);
-    let dark = rows_with(theme.COLOR_PURPLE);
-
-    assert!(!pink.is_empty(), "nothing was drawn in the lighter tone");
-    assert!(!dark.is_empty(), "nothing was drawn in the darker one");
-    assert!(pink.iter().max() < dark.iter().min(), "every pink row belongs above every dark one, got pink {pink:?} and dark {dark:?}");
+    let wordmark: Vec<&(u16, f32)> = lit.iter().take_while(|(_, tone)| *tone != lightness(theme.COLOR_TEXT).unwrap_or(-1.0)).collect();
+    assert!(wordmark.len() > 1, "the wordmark should cover more than one row: {lit:?}");
+    assert!(wordmark[0].1 > wordmark[wordmark.len() - 1].1, "the wordmark has to read lighter at the top, got {wordmark:?}");
 }
 
 #[test]

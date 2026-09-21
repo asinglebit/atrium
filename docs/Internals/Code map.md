@@ -41,7 +41,7 @@ src/
 
   helpers/
     palette.rs         guitar's palette, with two functions changed
-    logo.rs            The wordmark
+    logo.rs            The wordmark, and the grain and sheen that animate it
     scroll.rs          Keeping a selection on screen, and scrollbar lengths
     text.rs            Truncation from either end
     spinner.rs         Six frames, from elapsed time

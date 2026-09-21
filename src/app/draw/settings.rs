@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use ratatui::{
     Frame,
@@ -55,6 +55,8 @@ pub struct Context<'a> {
     pub installed: &'a [Found],
     pub default_profile: usize,
     pub socket: &'a Path,
+    /// How long atrium has been up, which is what animates the wordmark.
+    pub elapsed: Duration,
 }
 
 /// The settings view. `area` is the pane it fills; `border` is what the
@@ -180,10 +182,8 @@ fn header(body: &mut Body, tab: Tab, context: &Context, area: Rect, width: usize
     body.selectable(SelectionKind::Info);
 
     body.blank();
-    let rows = logo::rows_for(width);
-    for (index, line) in rows.iter().enumerate() {
-        let colour = logo::tone(index, rows, theme);
-        body.push(Line::from(Span::styled(*line, Style::default().fg(colour))).centered());
+    for line in logo::lines(logo::rows_for(width), theme, context.elapsed) {
+        body.push(line.centered());
     }
 
     body.blank();

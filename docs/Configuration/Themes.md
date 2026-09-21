@@ -105,6 +105,22 @@ atrium's own, so the two tools can never disagree about what red is. tmuxbar
 reads those same five out of `theme.json`, which is how a window name and a
 sidebar row end up the same colour.
 
-atrium's own accent is a pair: `COLOR_PINK` for the `atriuɱ` on the title line
-and the top 30% of the wordmark in [[Settings]] and on the [[Splash]],
-`COLOR_PURPLE` for the rest of it below.
+atrium's own accent is `COLOR_PINK` for the `atriuɱ` on the title line, and
+`COLOR_PURPLE` for the wordmark in [[Settings]] and on the [[Splash]].
+
+The wordmark is lit from a ramp of six mixed out of that one purple, from its
+lightest to its darkest, and a cell rolls the length of it as the sheen passes.
+The top 30% of the rows rest a step above the palette's purple and the rest a
+step below it, so the split reads as lighter on top without leaving the colour.
+
+The ramp is mixed rather than assembled from palette entries because there is no
+light or dark purple to assemble it from — `COLOR_PURPLE` and `COLOR_DURPLE`
+differ in hue, not in lightness. `palette::blend` does the mixing and
+`palette::distinct` is the backstop, separating any two stops a theme's own
+values would have landed on together. The themes themselves are untouched, so
+nothing else in the interface shifts and each stays faithful to the palette it
+is named after.
+
+A purple that is one of the terminal's own named colours has no channels to mix,
+so those themes hold a single tone and only the grain moves — which is also what
+keeps Monochrome monochrome rather than inventing six greys for it.

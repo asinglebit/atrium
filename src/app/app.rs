@@ -286,7 +286,8 @@ impl App {
     pub fn draw(&mut self, frame: &mut Frame) {
         let layout = self.layout_for(frame.area());
         self.layout = layout;
-        let spinner = spinner::frame_at(self.started.elapsed());
+        let elapsed = self.started.elapsed();
+        let spinner = spinner::frame_at(elapsed);
         let lit = spinner::pulse_now();
 
         // The agent paints its own cells; this is what colours everything it
@@ -296,7 +297,7 @@ impl App {
         // The splash takes the bare terminal: no frame, no title line, no status
         // line. Nothing is held, so none of them would have anything to say.
         if self.is_bare() {
-            draw::splash::draw(frame, frame.area(), &self.splash, &self.profiles, &self.theme, &self.keymap);
+            draw::splash::draw(frame, frame.area(), &self.splash, &self.profiles, &self.theme, &self.keymap, elapsed);
         } else {
             frame.render_widget(draw::pane::app_frame(&self.theme), layout.app);
 
@@ -311,6 +312,7 @@ impl App {
                     installed: &self.installed,
                     default_profile: self.default_profile,
                     socket: self.server.path(),
+                    elapsed,
                 };
                 draw::settings::draw(frame, layout.stage, layout.app, settings, &context);
             } else {
