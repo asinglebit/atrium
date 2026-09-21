@@ -54,6 +54,25 @@ impl Status {
         }
     }
 
+    /// What this status becomes when `event` arrives.
+    ///
+    /// An agent that has already exited stays exited: a hook that arrives late
+    /// must not bring a dead row back to life.
+    pub fn after(self, event: &str) -> Self {
+        if self == Self::Exited {
+            return self;
+        }
+        // These two lift a wait and never set one. Claude says nothing when a
+        // permission prompt is answered, so the tool going ahead -- or being
+        // refused -- is the first word of it; but hooks arrive out of order,
+        // and one landing after `Stop` must not pull a finished turn back to
+        // working.
+        if matches!(event, "PostToolUse" | "PermissionDenied") {
+            return if self == Self::NeedsInput { Self::Working } else { self };
+        }
+        Self::from_hook_event(event).unwrap_or(self)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Idle => "idle",
@@ -197,15 +216,8 @@ impl Agent {
         }
     }
 
-    /// An agent that has already exited stays exited: a hook that arrives late
-    /// must not bring a dead row back to life.
     pub fn apply_event(&mut self, event: &str) {
-        if self.status == Status::Exited {
-            return;
-        }
-        if let Some(status) = Status::from_hook_event(event) {
-            self.status = status;
-        }
+        self.status = self.status.after(event);
     }
 
     pub fn has_exited(&self) -> bool {

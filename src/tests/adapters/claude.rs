@@ -2,10 +2,14 @@ use super::*;
 use crate::helpers::palette::Theme;
 
 #[test]
-fn every_registered_event_maps_to_a_status() {
+fn every_registered_event_means_something() {
     use crate::core::agent::Status;
     for event in HOOK_EVENTS {
-        assert!(Status::from_hook_event(event).is_some(), "{event} is registered but means nothing");
+        // Either it names a status, or it lifts a wait. An event that does
+        // neither is a hook invocation nobody reads.
+        let names_a_status = Status::from_hook_event(event).is_some();
+        let lifts_a_wait = Status::NeedsInput.after(event) != Status::NeedsInput;
+        assert!(names_a_status || lifts_a_wait, "{event} is registered but means nothing");
     }
 }
 

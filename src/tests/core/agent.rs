@@ -14,7 +14,41 @@ fn hook_events_map_to_the_status_they_describe() {
 #[test]
 fn an_unknown_event_is_ignored_rather_than_guessed_at() {
     assert_eq!(Status::from_hook_event("PreToolUse"), None);
+    // These two lift a wait rather than describing one, so they are not here.
+    assert_eq!(Status::from_hook_event("PostToolUse"), None);
+    assert_eq!(Status::from_hook_event("PermissionDenied"), None);
     assert_eq!(Status::from_hook_event(""), None);
+}
+
+/// The two that mean "no longer waiting on you", which is the only thing
+/// Claude ever says about a permission prompt being answered.
+#[test]
+fn a_tool_going_ahead_lifts_a_wait() {
+    for event in ["PostToolUse", "PermissionDenied"] {
+        assert_eq!(Status::NeedsInput.after(event), Status::Working, "{event} should have lifted the wait");
+    }
+}
+
+#[test]
+fn lifting_a_wait_that_is_not_there_leaves_the_status_alone() {
+    for event in ["PostToolUse", "PermissionDenied"] {
+        for settled in [Status::Idle, Status::Working, Status::Error, Status::Exited] {
+            assert_eq!(settled.after(event), settled, "{event} should have left {} alone", settled.label());
+        }
+    }
+}
+
+#[test]
+fn an_agent_that_has_exited_stays_exited() {
+    for event in ["SessionStart", "UserPromptSubmit", "Notification", "Stop"] {
+        assert_eq!(Status::Exited.after(event), Status::Exited, "{event} should not have revived a dead row");
+    }
+}
+
+#[test]
+fn an_event_that_says_nothing_leaves_the_status_where_it_was() {
+    assert_eq!(Status::NeedsInput.after("PreToolUse"), Status::NeedsInput);
+    assert_eq!(Status::Working.after(""), Status::Working);
 }
 
 #[test]

@@ -54,10 +54,24 @@ Claude reports through hooks. `opencode` and `codex` are held but only watched.
 | `SessionStart`, `Stop` | `Idle` |
 | `UserPromptSubmit` | `Working` |
 | `Notification`, `PermissionRequest` | `NeedsInput` |
+| `PostToolUse`, `PermissionDenied` | lifts `NeedsInput`, nothing else |
 | `StopFailure` | `Error` |
 | `SessionEnd` | `Exited` |
 
 Unknown events are ignored rather than guessed at.
+
+## Two events that only lift a wait
+
+Claude says nothing at the moment you answer a permission prompt. Left to the
+table above, `NeedsInput` would stand from the prompt until the end of the whole
+turn — the agent working away under a row that still says it wants you.
+
+The tool going ahead is the first word of it, so `PostToolUse` and
+`PermissionDenied` are registered too. They **only** turn `NeedsInput` into
+`Working` and leave every other status where it stands, which is what keeps
+them honest: hooks are `async` and arrive out of order, and `PostToolUse` fires
+on every tool call rather than only the ones that waited on you. One landing
+after `Stop` must not pull a finished turn back to working.
 
 ## A second spelling, for matching
 

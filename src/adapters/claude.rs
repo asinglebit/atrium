@@ -11,7 +11,7 @@ use crate::{
 /// The hook events atrium registers, and the status each one means. Registering
 /// per event is what lets the handler take the event name as an argument
 /// instead of parsing Claude's payload.
-pub const HOOK_EVENTS: [&str; 7] = ["SessionStart", "UserPromptSubmit", "Notification", "PermissionRequest", "Stop", "StopFailure", "SessionEnd"];
+pub const HOOK_EVENTS: [&str; 9] = ["SessionStart", "UserPromptSubmit", "Notification", "PermissionRequest", "PostToolUse", "PermissionDenied", "Stop", "StopFailure", "SessionEnd"];
 
 /// What atrium's theme is filed under. Claude reads a user theme from
 /// `<config dir>/themes/<slug>.json` and names it `custom:<slug>`.
