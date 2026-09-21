@@ -43,15 +43,40 @@ fn only_a_named_profile_earns_a_row_tag() {
 #[test]
 fn the_clis_atrium_knows_lead_with_the_one_a_profile_defaults_to() {
     assert_eq!(KNOWN_PROGRAMS[0], DEFAULT_PROGRAM, "an empty program means claude, and claude is what a fresh machine is offered first");
-    assert!(KNOWN_PROGRAMS.contains(&"opencode") && KNOWN_PROGRAMS.contains(&"codex"), "{KNOWN_PROGRAMS:?}");
+    assert!(KNOWN_PROGRAMS.contains(&"opencode") && KNOWN_PROGRAMS.contains(&"copilot") && KNOWN_PROGRAMS.contains(&"codex"), "{KNOWN_PROGRAMS:?}");
 }
 
 #[test]
 fn a_config_dir_is_found_by_the_variable_it_sets() {
-    let profile = Profile { name: "work".into(), program: "claude".into(), args: Vec::new(), env: vec![(CONFIG_DIR_ENV.to_owned(), "/home/x/.claude-work".to_owned())] };
+    let profile = Profile { name: "work".into(), program: "claude".into(), args: Vec::new(), env: vec![("CLAUDE_CONFIG_DIR".to_owned(), "/home/x/.claude-work".to_owned())] };
 
     assert_eq!(profile.config_dir(), Some("/home/x/.claude-work"));
     assert_eq!(Profile::bare("claude").config_dir(), None);
+}
+
+#[test]
+fn the_variable_a_config_dir_sets_follows_the_cli() {
+    assert_eq!(config_dir_env("claude"), Some("CLAUDE_CONFIG_DIR"));
+    assert_eq!(config_dir_env("copilot"), Some("COPILOT_HOME"));
+    // Better to set nothing than to invent a name a CLI does not read.
+    assert_eq!(config_dir_env("opencode"), None);
+    assert_eq!(config_dir_env("bash"), None);
+}
+
+#[test]
+fn a_directory_written_against_the_wrong_cli_is_not_found_under_anothers_variable() {
+    // The same pair, read as a copilot profile: CLAUDE_CONFIG_DIR is not what
+    // copilot reads, so this profile sets no directory at all.
+    let profile = Profile { name: "work".into(), program: "copilot".into(), args: Vec::new(), env: vec![("CLAUDE_CONFIG_DIR".to_owned(), "/home/x/.claude-work".to_owned())] };
+
+    assert_eq!(profile.config_dir(), None);
+}
+
+#[test]
+fn the_directory_guessed_from_a_name_follows_the_cli_too() {
+    assert_eq!(config_dir_guess("claude", "work").as_deref(), Some("~/.claude-work"));
+    assert_eq!(config_dir_guess("copilot", "work").as_deref(), Some("~/.copilot-work"));
+    assert_eq!(config_dir_guess("codex", "work"), None);
 }
 
 #[test]

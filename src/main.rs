@@ -43,10 +43,11 @@ PROFILES
     A profile is a CLI plus what it needs: extra flags, and extra environment.
     A Claude subscription is one of these -- `config_dir` sets CLAUDE_CONFIG_DIR,
     so `work` and `personal` are two profiles rather than two shell aliases.
+    Which variable it sets follows the CLI: copilot takes COPILOT_HOME instead.
     They live in profiles.json, and `ctrl+s` -> profiles is where they are made.
 
     Beside them atrium offers the CLIs it knows and finds installed -- claude,
-    opencode, codex -- so an opencode on your PATH needs no profile at all.
+    opencode, copilot, codex -- so one on your PATH needs no profile at all.
     Inside the new-agent modal, `tab` cycles the lot, and the splash lists it.
 
 KEYS
@@ -114,8 +115,8 @@ fn check_config() {
     println!("  profiles:  (* is what a bare `atrium` holds)");
     for (index, entry) in config.profiles.iter().enumerate() {
         println!("   {} {}", if index == config.default_profile { "*" } else { " " }, entry.label());
-        if let Some(dir) = entry.config_dir() {
-            println!("       {}={dir}", profile::CONFIG_DIR_ENV);
+        if let Some((key, dir)) = profile::config_dir_env(&entry.program).zip(entry.config_dir()) {
+            println!("       {key}={dir}");
         }
         if !entry.args.is_empty() {
             println!("       args: {}", entry.args.join(" "));

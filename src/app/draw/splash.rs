@@ -71,9 +71,12 @@ pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile]
 
     // Nothing configured and nothing installed. Naming what was looked for is
     // the whole answer, so it is said here rather than left to the settings.
+    // The names go on their own line: together with the sentence they outgrew
+    // eighty columns, and the names are the half worth reading.
     if profiles.is_empty() {
-        let message = format!("nothing installed that atrium knows -- it looks for {}", KNOWN_PROGRAMS.join(", "));
-        lines.push(Line::from(Span::styled(truncate_with_ellipsis(&message, area.width as usize), Style::default().fg(theme.COLOR_GREY_600))).centered());
+        for message in ["nothing installed that atrium knows -- it looks for".to_owned(), KNOWN_PROGRAMS.join(", ")] {
+            lines.push(Line::from(Span::styled(truncate_with_ellipsis(&message, area.width as usize), Style::default().fg(theme.COLOR_GREY_600))).centered());
+        }
     }
 
     for (index, profile) in profiles.iter().enumerate() {

@@ -41,7 +41,7 @@ fn a_prompt_shows_what_it_wants_and_what_has_been_typed() {
 
     let out = rendered(&editor, "");
 
-    assert!(out.contains(Prompt::AddName.title()), "{out}");
+    assert!(out.contains(&Prompt::AddName.title()), "{out}");
     assert!(out.contains("personal"), "{out}");
 }
 
@@ -59,7 +59,7 @@ fn a_refusal_stays_in_the_modal() {
 #[test]
 fn deleting_says_it_cannot_be_undone() {
     let mut editor = Editor::manage(0);
-    for _ in 0..4 {
+    for _ in 0..Action::ALL.iter().position(|action| *action == Action::Delete).expect("delete is on the list") {
         editor.move_down();
     }
     editor.confirm(&StoredProfiles { default: String::new(), profiles: vec![StoredProfile::named("work")] });

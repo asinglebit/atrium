@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    adapters::opencode,
+    adapters::{copilot, opencode},
     app::{
         input::keymap::Keymap,
         state::settings::{Selection, SelectionKind, Settings, Tab, TabHitbox},
@@ -238,6 +238,10 @@ fn general(body: &mut Body, context: &Context, width: usize) {
     if context.installed.iter().any(|found| found.program == "opencode") {
         paths.push((" opencode theme:", opencode::theme_path()));
     }
+    // The plugin copilot is handed on the way in, named on the same terms.
+    if context.installed.iter().any(|found| found.program == "copilot") {
+        paths.push((" copilot plugin:", copilot::plugin_dir()));
+    }
     for (index, (label, path)) in paths.iter().enumerate() {
         body.push(row(label, &format!("{} ", path.display()), width, shade(index, theme)));
         body.selectable(SelectionKind::Info);
@@ -282,9 +286,11 @@ fn profiles(body: &mut Body, context: &Context, width: usize) {
         body.push(row("  none yet -- what is installed below is what is on offer", "", width, plain));
     }
 
-    // One name column across every row, so the directories line up under each
-    // other rather than each row finding its own edge.
+    // One name column and one program column across every row, so the
+    // directories line up under each other rather than each row finding its own
+    // edge.
     let name_width = context.profiles.profiles.iter().map(|profile| profile.name.chars().count()).max().unwrap_or(0);
+    let program_width = context.profiles.profiles.iter().map(|profile| profile.program_or_default().chars().count()).max().unwrap_or(0);
 
     for (index, profile) in context.profiles.profiles.iter().enumerate() {
         let is_default = index == context.default_profile;
@@ -295,7 +301,7 @@ fn profiles(body: &mut Body, context: &Context, width: usize) {
             style = style.bg(theme.background_or_default(theme.COLOR_GREY_900));
         }
 
-        let left = format!(" {:<name_width$}   {}", profile.name, profile.config_dir);
+        let left = format!(" {:<name_width$}   {:<program_width$}   {}", profile.name, profile.program_or_default(), profile.config_dir);
         body.push(row(&truncate_with_ellipsis(&left, width.saturating_sub(4)), &format!("{marker} "), width, style));
         body.selectable(SelectionKind::Profile(index));
     }

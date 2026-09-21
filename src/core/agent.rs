@@ -158,7 +158,7 @@ impl Agent {
         let kind = adapters::detect(&spec.program);
 
         let mut cmd = spec.command();
-        let config_dir = spec.env.iter().find(|(key, _)| key == profile::CONFIG_DIR_ENV).map(|(_, value)| value.clone());
+        let config_dir = profile::config_dir_env(&spec.program).and_then(|key| spec.env.iter().find(|(name, _)| name == key).map(|(_, value)| value.clone()));
         kind.instrument(&mut cmd, &Wiring { exe: harness.exe.clone(), socket: harness.socket.clone(), agent_id: id, theme: *theme, config_dir: config_dir.clone() });
 
         let session = PtySession::spawn(cmd, rows, cols)?;

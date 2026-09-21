@@ -10,6 +10,7 @@ so `/usr/local/bin/claude` and `claude` reach the same adapter.
 | Name | Reports via | Notes |
 | --- | --- | --- |
 | `claude` | Hooks | Fully wired. Wears atrium's [[Themes\|theme]], and follows a change while running |
+| `copilot` | Hooks | Fully wired, through a plugin atrium generates. Keeps its own colours — see [[Themes]] |
 | `opencode` | Heuristic | Held and tagged, so it can report once opencode grows something hook-shaped. Wears atrium's [[Themes\|theme]] |
 | `codex` | Heuristic | Same |
 | anything else | Heuristic | Still held; atrium just cannot say more than whether it is alive |
@@ -41,9 +42,9 @@ its own colours is not a broken agent.
 is launched with its hooks passed on the command line, so a Claude started
 outside atrium is completely unaffected and the global config is never written.
 
-Seven events are registered, one hook each: `SessionStart`, `UserPromptSubmit`,
-`Notification`, `PermissionRequest`, `Stop`, `StopFailure`, `SessionEnd`. See
-[[Status]] for what each one means.
+Nine events are registered, one hook each: `SessionStart`, `UserPromptSubmit`,
+`Notification`, `PermissionRequest`, `PostToolUse`, `PermissionDenied`, `Stop`,
+`StopFailure`, `SessionEnd`. See [[Status]] for what each one means.
 
 ### Exec form is a correctness fix, not a preference
 
@@ -72,6 +73,57 @@ in the agent that wrote it.
 `atrium hook` never reports an error: no socket, no environment, a dead atrium —
 it exits 0 and says nothing. A missed status update is not worth disturbing a
 conversation over.
+
+## Copilot's hooks
+
+**Handed over as `--plugin-dir`, never written into `~/.copilot`.** copilot
+loads a plugin from any directory it is pointed at, so atrium generates one and
+names it on the command line — the same trade claude's `--settings` makes, and
+for the same reason: a copilot started outside atrium is completely unaffected.
+
+The directory is `~/.config/atrium/copilot-plugin/`, with atrium's own files
+rather than anywhere copilot reads by itself:
+
+```
+plugin.json   the manifest, naming the file beside it
+hooks.json    one hook per event
+```
+
+It is rewritten on every spawn, because the path it carries is wherever this
+atrium is installed.
+
+### copilot's event names are translated, not adopted
+
+atrium's wire vocabulary is spelled the way claude spells it, and
+`Status::from_hook_event` is the one table that reads it. So the adapter
+translates on the way out rather than teaching `core` a second vocabulary:
+
+| copilot says | atrium hears | which means |
+| --- | --- | --- |
+| `sessionStart` | `SessionStart` | idle |
+| `userPromptSubmitted` | `UserPromptSubmit` | working |
+| `notification` | `Notification` | **needs you** |
+| `postToolUse`, `postToolUseFailure` | `PostToolUse` | lifts a wait |
+| `agentStop` | `Stop` | idle |
+| `errorOccurred` | `StopFailure` | error |
+| `sessionEnd` | `SessionEnd` | exited |
+
+`notification` is the one that earns the wiring: it is what copilot raises for a
+permission prompt or a question of its own, which is the whole thing the sidebar
+exists to show.
+
+### A shell string is quoted, because it cannot be avoided
+
+copilot's hook command is a **shell string**, under a `bash` key. Claude's
+`args` escape hatch is not available, so the path is single-quoted and any
+quote in it is closed, escaped and reopened — `helpers::shell::quote`. A test
+asserts it with a path holding a space, a quote and a `rm -rf` after it.
+
+Only `bash` is written. The status channel is a unix socket, so there is no
+Windows to write a `powershell` arm for.
+
+`timeoutSec` is 5. copilot's own default is thirty seconds and there is no
+`async` flag to lean on, but the handler writes one line to a socket and exits.
 
 ## The socket
 

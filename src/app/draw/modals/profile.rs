@@ -29,7 +29,7 @@ pub fn draw(frame: &mut Frame, full: Rect, editor: &Editor, name: &str, theme: &
     let (title, mut lines) = match &editor.step {
         Step::Actions { selected, .. } => (" profile ", actions(*selected, name, theme)),
         Step::ConfirmDelete { .. } => (" delete profile ", confirm(name, theme)),
-        Step::Asking { prompt, input } => (" profile ", asking(prompt.title(), input, theme, lit)),
+        Step::Asking { prompt, input } => (" profile ", asking(&prompt.title(), input, theme, lit)),
     };
 
     // A refusal stays in the modal, so another answer can be given without

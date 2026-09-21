@@ -29,7 +29,8 @@ pub struct StoredProfile {
     /// Empty means `claude`, which is what a subscription is.
     #[facet(default)]
     pub program: String,
-    /// Shorthand for `CLAUDE_CONFIG_DIR`. Empty means the profile sets none.
+    /// Shorthand for whichever variable this CLI keeps its configuration under
+    /// -- `CLAUDE_CONFIG_DIR`, `COPILOT_HOME`. Empty means the profile sets none.
     #[facet(default)]
     pub config_dir: String,
     #[facet(default)]
@@ -42,7 +43,17 @@ impl StoredProfile {
     /// A profile named after a subscription, guessing the directory that
     /// convention would put it in.
     pub fn named(name: &str) -> Self {
-        Self { name: name.to_owned(), program: String::new(), config_dir: format!("~/.claude-{name}"), args: Vec::new(), env: Vec::new() }
+        Self::named_for(profile::DEFAULT_PROGRAM, name)
+    }
+
+    /// The same, for a CLI other than the default one. A CLI with no directory
+    /// of its own to name gets none rather than a guess.
+    pub fn named_for(program: &str, name: &str) -> Self {
+        let config_dir = profile::config_dir_guess(program, name).unwrap_or_default();
+        // The default one is stored as nothing, which is what an unwritten
+        // `program` field already means.
+        let program = if program == profile::DEFAULT_PROGRAM { String::new() } else { program.to_owned() };
+        Self { name: name.to_owned(), program, config_dir, args: Vec::new(), env: Vec::new() }
     }
 
     pub fn program_or_default(&self) -> &str {
@@ -52,8 +63,13 @@ impl StoredProfile {
     /// The runnable form: every path and argument expanded.
     pub fn resolve(&self) -> Profile {
         let mut env = Vec::new();
-        if !self.config_dir.trim().is_empty() {
-            env.push((profile::CONFIG_DIR_ENV.to_owned(), profile::expand(&self.config_dir)));
+        // A directory typed against a CLI with no variable for one is left
+        // where it was written rather than turned into an environment variable
+        // nothing reads.
+        if let Some(key) = profile::config_dir_env(self.program_or_default())
+            && !self.config_dir.trim().is_empty()
+        {
+            env.push((key.to_owned(), profile::expand(&self.config_dir)));
         }
         env.extend(self.env.iter().map(|var| (var.name.clone(), profile::expand(&var.value))));
 

@@ -1,5 +1,11 @@
 use super::*;
 
+/// The variable a claude profile's `config_dir` sets, named through the same
+/// lookup the code uses rather than written out twice.
+fn claude_config_dir() -> &'static str {
+    profile::config_dir_env("claude").expect("claude keeps a config dir")
+}
+
 #[test]
 fn hook_events_map_to_the_status_they_describe() {
     assert_eq!(Status::from_hook_event("SessionStart"), Some(Status::Idle));
@@ -97,8 +103,8 @@ fn a_profiles_environment_reaches_the_child() {
     let profile = Profile {
         name: "work".to_owned(),
         program: "sh".to_owned(),
-        args: vec!["-c".to_owned(), format!("printf \"dir=${}\"", profile::CONFIG_DIR_ENV)],
-        env: vec![(profile::CONFIG_DIR_ENV.to_owned(), "/home/x/.claude-work".to_owned())],
+        args: vec!["-c".to_owned(), format!("printf \"dir=${}\"", claude_config_dir())],
+        env: vec![(claude_config_dir().to_owned(), "/home/x/.claude-work".to_owned())],
     };
 
     let agent = Agent::spawn(&AgentSpec::from_profile(&profile, "."), &harness(), &Theme::classic(), 8, 60).expect("pty should open");
@@ -112,7 +118,7 @@ fn a_spec_from_a_profile_carries_its_args_and_environment() {
         name: "work".to_owned(),
         program: "claude".to_owned(),
         args: vec!["--append-system-prompt-file".to_owned(), "/etc/prompt.md".to_owned()],
-        env: vec![(profile::CONFIG_DIR_ENV.to_owned(), "/home/x/.claude-work".to_owned())],
+        env: vec![(claude_config_dir().to_owned(), "/home/x/.claude-work".to_owned())],
     };
 
     let spec = AgentSpec::from_profile(&profile, "/home/x/projects/atrium");

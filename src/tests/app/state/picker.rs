@@ -21,7 +21,12 @@ fn with_profiles(names: &[&str], profiles: Vec<Profile>) -> Picker {
 fn subscriptions() -> Vec<Profile> {
     ["work", "personal"]
         .iter()
-        .map(|name| Profile { name: (*name).to_owned(), program: "claude".to_owned(), args: Vec::new(), env: vec![(profile::CONFIG_DIR_ENV.to_owned(), format!("/home/x/.claude-{name}"))] })
+        .map(|name| Profile {
+            name: (*name).to_owned(),
+            program: "claude".to_owned(),
+            args: Vec::new(),
+            env: vec![(profile::config_dir_env("claude").expect("claude keeps one").to_owned(), format!("/home/x/.claude-{name}"))],
+        })
         .collect()
 }
 

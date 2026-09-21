@@ -45,7 +45,8 @@ Two sources, declared per CLI by its [[Adapters and hooks|adapter]]:
 - **`Hooks`** — the CLI calls back into atrium and says what it is doing.
 - **`Heuristic`** — nothing calls back, so atrium can only watch the process.
 
-Claude reports through hooks. `opencode` and `codex` are held but only watched.
+`claude` and `copilot` report through hooks. `opencode` and `codex` are held
+but only watched.
 
 ## What each hook event means
 

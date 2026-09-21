@@ -84,6 +84,26 @@ fn resolving_expands_what_was_stored_raw() {
 }
 
 #[test]
+fn a_profile_sets_the_variable_its_own_cli_reads() {
+    let copilot = StoredProfile::named_for("copilot", "day-job");
+
+    assert_eq!(copilot.program, "copilot");
+    assert_eq!(copilot.config_dir, "~/.copilot-day-job", "the guess follows the CLI, not claude");
+    assert_eq!(copilot.resolve().env[0].0, "COPILOT_HOME");
+}
+
+#[test]
+fn a_cli_with_no_variable_is_handed_no_directory_at_all() {
+    // Nothing is guessed at either end: no directory to prefill, and a
+    // directory written by hand is not turned into a variable nothing reads.
+    assert_eq!(StoredProfile::named_for("codex", "work").config_dir, "");
+
+    let written_anyway = StoredProfile { name: "work".to_owned(), program: "codex".to_owned(), config_dir: "~/.codex-work".to_owned(), args: Vec::new(), env: Vec::new() };
+
+    assert!(written_anyway.resolve().env.is_empty());
+}
+
+#[test]
 fn an_empty_file_resolves_to_whatever_is_installed() {
     let (profiles, default) = StoredProfiles::default().resolve(&installed(&["claude", "opencode"]));
 

@@ -20,6 +20,7 @@ pub mod helpers {
     pub mod logo;
     pub mod palette;
     pub mod scroll;
+    pub mod shell;
     pub mod spinner;
     pub mod text;
     pub mod version;

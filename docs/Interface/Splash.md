@@ -51,7 +51,8 @@ list shifts down to make room for it. The [[Modals|picker]] keeps a failed launc
 the same way.
 
 A machine with nothing installed and nothing configured has an **empty list**,
-and the splash says so in place of it, naming the three CLIs it looked for.
+and the splash says so in place of it, naming the CLIs it looked for on a line
+of their own -- with the sentence they had outgrown eighty columns.
 Offering a `codex` that is not there would only produce that failure line.
 
 ## The wordmark

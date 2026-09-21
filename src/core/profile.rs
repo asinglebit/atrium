@@ -4,11 +4,33 @@ pub const DEFAULT_PROGRAM: &str = "claude";
 /// The CLIs atrium knows how to hold, and so the ones it looks for on `PATH`.
 /// An installed one becomes a profile of its own, so the picker has one code
 /// path whether anything is configured or not.
-pub const KNOWN_PROGRAMS: [&str; 3] = ["claude", "opencode", "codex"];
+pub const KNOWN_PROGRAMS: [&str; 4] = ["claude", "opencode", "copilot", "codex"];
 
-/// Which Claude subscription is in use is this environment variable and nothing
-/// else, which is why `config_dir` is worth its own setting.
-pub const CONFIG_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
+/// Which variable tells a CLI where to keep its own configuration -- the one a
+/// profile's `config_dir` sets. Which Claude subscription is in use is this and
+/// nothing else, which is why `config_dir` is worth its own setting, and
+/// copilot works the same way under a different name.
+///
+/// None for a CLI with no such variable, or none atrium has checked: writing a
+/// guessed name into a child's environment is worse than setting nothing.
+pub fn config_dir_env(program: &str) -> Option<&'static str> {
+    match program {
+        "claude" => Some("CLAUDE_CONFIG_DIR"),
+        "copilot" => Some("COPILOT_HOME"),
+        _ => None,
+    }
+}
+
+/// Where convention would put a named profile's directory, for the CLI it
+/// launches. The add flow fills this in, so the common case is one more press
+/// of enter rather than a path typed out.
+pub fn config_dir_guess(program: &str, name: &str) -> Option<String> {
+    match program {
+        "claude" => Some(format!("~/.claude-{name}")),
+        "copilot" => Some(format!("~/.copilot-{name}")),
+        _ => None,
+    }
+}
 
 /// A named launch recipe: which CLI, plus what to add to its command line and
 /// its environment.
@@ -42,7 +64,8 @@ impl Profile {
     }
 
     pub fn config_dir(&self) -> Option<&str> {
-        self.env.iter().find(|(key, _)| key == CONFIG_DIR_ENV).map(|(_, value)| value.as_str())
+        let key = config_dir_env(&self.program)?;
+        self.env.iter().find(|(name, _)| name == key).map(|(_, value)| value.as_str())
     }
 }
 

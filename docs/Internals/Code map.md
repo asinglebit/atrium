@@ -22,6 +22,7 @@ src/
 
   adapters/            Per-CLI launch and status wiring
     claude.rs          --settings hooks, in exec form
+    copilot.rs         --plugin-dir hooks, in a generated plugin
     opencode.rs        Tagged only
     codex.rs           Tagged only
 

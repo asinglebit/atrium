@@ -63,7 +63,8 @@ losing a dragged width costs one drag, taking atrium down over it costs an agent
 
 ```json
 { "default": "work",
-  "profiles": [{ "name": "work", "config_dir": "~/.claude-work", "args": [] }] }
+  "profiles": [{ "name": "work", "config_dir": "~/.claude-work", "args": [] },
+               { "name": "day-job", "program": "copilot", "config_dir": "~/.copilot-day-job" }] }
 ```
 
 Written whenever a profile is added, renamed or deleted in [[Settings]]. Unlike
@@ -89,4 +90,5 @@ over it.
 | `ATRIUM_PROJECTS` | Where [[Projects]] are looked for. Defaults to `~/projects` |
 | `XDG_RUNTIME_DIR` | Where the status socket lives — see [[Adapters and hooks]] |
 | `ATRIUM_AGENT_ID`, `ATRIUM_SOCK` | Set *by* atrium on each agent, not by you |
-| `CLAUDE_CONFIG_DIR` | Set by atrium from a profile's `config_dir`, which is what picks a subscription |
+| `CLAUDE_CONFIG_DIR` | Set by atrium from a claude profile's `config_dir`, which is what picks a subscription |
+| `COPILOT_HOME` | The same, for a copilot profile. Which variable a `config_dir` sets follows the CLI |

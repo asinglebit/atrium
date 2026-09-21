@@ -1,5 +1,6 @@
 pub mod claude;
 pub mod codex;
+pub mod copilot;
 pub mod opencode;
 
 use std::path::PathBuf;
@@ -54,6 +55,7 @@ pub fn detect(program: &str) -> Box<dyn AgentKind> {
     match name {
         "claude" => Box::new(claude::ClaudeCode),
         "opencode" => Box::new(opencode::OpenCode),
+        "copilot" => Box::new(copilot::Copilot),
         "codex" => Box::new(codex::Codex),
         _ => Box::new(Unknown),
     }
@@ -83,3 +85,7 @@ pub fn tag(cmd: &mut CommandBuilder, wiring: &Wiring) {
     cmd.env("ATRIUM_AGENT_ID", wiring.agent_id.to_string());
     cmd.env("ATRIUM_SOCK", &wiring.socket);
 }
+
+#[cfg(test)]
+#[path = "../tests/adapters/detect.rs"]
+mod tests;

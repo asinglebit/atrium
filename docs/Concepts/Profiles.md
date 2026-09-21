@@ -36,7 +36,7 @@ old `[[profiles]]` block is told where they went — see [[Configuration]].
 | --- | --- |
 | `name` | Required. What the picker and the [[Sidebar]] row call it |
 | `program` | The CLI. Empty means `claude`, so a subscription need not say it |
-| `config_dir` | Shorthand for `CLAUDE_CONFIG_DIR` — which subscription, and nothing else |
+| `config_dir` | Shorthand for whichever variable this CLI keeps its configuration under — `CLAUDE_CONFIG_DIR` for claude, `COPILOT_HOME` for copilot. A CLI with no such variable sets nothing |
 | `args` | Added to the command line, in order |
 | `env` | `[{ "name": …, "value": … }]`, for anything `config_dir` does not cover |
 
@@ -60,19 +60,27 @@ The `profiles` tab in [[Settings]], modelled on guitar's remote management.
 
  actions:            select to manage | + add to create
 
- + add profile                                  (enter)
- work       ~/.claude-work                          🞊
- personal   ~/.claude-personal                      🞅
+ + add profile                                          (enter)
+ work       claude    ~/.claude-work                        🞊
+ personal   claude    ~/.claude-personal                    🞅
+ day-job    copilot   ~/.copilot-day-job                    🞅
 ```
 
-**`+ add profile`** chains three prompts — name, then config dir prefilled with
-`~/.claude-<name>`, then args — so the common case is a name and two presses of
-enter. Esc backs out of the whole thing rather than one step, because half an
-added profile is not worth keeping.
+**`+ add profile`** chains four prompts — name, then the CLI prefilled with
+`claude`, then config dir prefilled with the convention for that CLI, then args
+— so the common case is a name and three presses of enter. Esc backs out of the
+whole thing rather than one step, because half an added profile is not worth
+keeping.
+
+A CLI that keeps no directory of its own **skips the directory prompt**, rather
+than being asked a question it has no answer to. The prompt names the variable
+it is actually setting, so it is clear which one an answer lands in.
 
 **Selecting one** opens an action list: `set as default`, `rename`,
-`edit config dir`, `edit args`, `delete`. Editing prefills with what is there
-now, so it is a correction rather than retyping. Deleting asks first.
+`edit program`, `edit config dir`, `edit args`, `delete`. Editing prefills with
+what is there now, so it is a correction rather than retyping. Deleting asks
+first. `edit config dir` on a CLI with no such variable says so rather than
+taking a value nothing would read.
 
 Every change is written straight away and taken up at once — the next `ctrl+space` `n`
 sees it without atrium being restarted. A refusal, such as a name already taken,
@@ -96,7 +104,7 @@ argument containing one. The prompt says so rather than pretending otherwise.
 ## What is installed
 
 atrium also looks on `PATH` for the CLIs it knows — `claude`, `opencode`,
-`codex` — and offers each one it finds as a profile of its own, so the picker
+`copilot`, `codex` — and offers each one it finds as a profile of its own, so the picker
 has a single code path and a machine with nothing written down still has
 something to hold. `src/core/installed.rs`.
 

@@ -1,4 +1,7 @@
-use crate::core::profiles_file::{StoredProfile, StoredProfiles};
+use crate::core::{
+    profile,
+    profiles_file::{StoredProfile, StoredProfiles},
+};
 
 /// What can be done to a profile once it is selected. Guitar's remote actions,
 /// mapped onto what a profile holds.
@@ -6,18 +9,20 @@ use crate::core::profiles_file::{StoredProfile, StoredProfiles};
 pub enum Action {
     SetDefault,
     Rename,
+    EditProgram,
     EditConfigDir,
     EditArgs,
     Delete,
 }
 
 impl Action {
-    pub const ALL: [Action; 5] = [Action::SetDefault, Action::Rename, Action::EditConfigDir, Action::EditArgs, Action::Delete];
+    pub const ALL: [Action; 6] = [Action::SetDefault, Action::Rename, Action::EditProgram, Action::EditConfigDir, Action::EditArgs, Action::Delete];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::SetDefault => "set as default",
             Self::Rename => "rename",
+            Self::EditProgram => "edit program",
             Self::EditConfigDir => "edit config dir",
             Self::EditArgs => "edit args",
             Self::Delete => "delete",
@@ -25,26 +30,35 @@ impl Action {
     }
 }
 
-/// What is being asked for. Adding chains three of these, the way guitar chains
-/// a remote's name into its url.
+/// What is being asked for. Adding chains these, the way guitar chains a
+/// remote's name into its url. The steps after the program carry it along,
+/// because which CLI it is decides the directory guess and what the directory
+/// is even called.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Prompt {
     AddName,
-    AddConfigDir { name: String },
-    AddArgs { name: String, config_dir: String },
+    AddProgram { name: String },
+    AddConfigDir { name: String, program: String },
+    AddArgs { name: String, program: String, config_dir: String },
     Rename(usize),
-    EditConfigDir(usize),
+    EditProgram(usize),
+    EditConfigDir { index: usize, program: String },
     EditArgs(usize),
 }
 
 impl Prompt {
     /// What the modal is titled, which is also the only place the args
-    /// splitting rule gets explained.
-    pub fn title(&self) -> &'static str {
+    /// splitting rule gets explained, and the only place the directory says
+    /// which variable it actually sets.
+    pub fn title(&self) -> String {
         match self {
-            Self::AddName | Self::Rename(_) => "name",
-            Self::AddConfigDir { .. } | Self::EditConfigDir(_) => "config dir -- ~ and $VAR are kept as written",
-            Self::AddArgs { .. } | Self::EditArgs(_) => "args, split on spaces -- leave empty for none",
+            Self::AddName | Self::Rename(_) => "name".to_owned(),
+            Self::AddProgram { .. } | Self::EditProgram(_) => format!("program -- leave empty for {}", profile::DEFAULT_PROGRAM),
+            Self::AddConfigDir { program, .. } | Self::EditConfigDir { program, .. } => match profile::config_dir_env(program) {
+                Some(key) => format!("config dir ({key}) -- ~ and $VAR are kept as written"),
+                None => "config dir -- ~ and $VAR are kept as written".to_owned(),
+            },
+            Self::AddArgs { .. } | Self::EditArgs(_) => "args, split on spaces -- leave empty for none".to_owned(),
         }
     }
 }
@@ -152,8 +166,19 @@ impl Editor {
                 self.ask(Prompt::Rename(index), current.map(|entry| entry.name.clone()).unwrap_or_default());
                 Outcome::Continue
             },
+            Action::EditProgram => {
+                self.ask(Prompt::EditProgram(index), current.map(|entry| entry.program.clone()).unwrap_or_default());
+                Outcome::Continue
+            },
             Action::EditConfigDir => {
-                self.ask(Prompt::EditConfigDir(index), current.map(|entry| entry.config_dir.clone()).unwrap_or_default());
+                let program = current.map_or_else(|| profile::DEFAULT_PROGRAM.to_owned(), |entry| entry.program_or_default().to_owned());
+                // A CLI with no directory of its own is told so rather than
+                // handed a prompt whose answer nothing would ever read.
+                if profile::config_dir_env(&program).is_none() {
+                    self.fail(format!("{program} keeps no config directory atrium can set"));
+                    return Outcome::Continue;
+                }
+                self.ask(Prompt::EditConfigDir { index, program }, current.map(|entry| entry.config_dir.clone()).unwrap_or_default());
                 Outcome::Continue
             },
             Action::EditArgs => {
@@ -171,21 +196,37 @@ impl Editor {
                     self.fail("a profile needs a name");
                     return Outcome::Continue;
                 }
-                // The directory convention guessed from the name, so the common
-                // case is two presses of enter.
-                let guess = format!("~/.claude-{value}");
-                self.ask(Prompt::AddConfigDir { name: value }, guess);
+                self.ask(Prompt::AddProgram { name: value }, profile::DEFAULT_PROGRAM.to_owned());
                 Outcome::Continue
             },
-            Prompt::AddConfigDir { name } => {
-                self.ask(Prompt::AddArgs { name, config_dir: value }, String::new());
+            Prompt::AddProgram { name } => {
+                let program = if value.is_empty() { profile::DEFAULT_PROGRAM.to_owned() } else { value };
+                // A CLI that keeps no directory of its own skips straight past
+                // the question, rather than being asked one it has no answer to.
+                match profile::config_dir_guess(&program, &name) {
+                    // The directory convention guessed from the name, so the
+                    // common case is one more press of enter.
+                    Some(guess) => self.ask(Prompt::AddConfigDir { name, program }, guess),
+                    None => self.ask(Prompt::AddArgs { name, program, config_dir: String::new() }, String::new()),
+                }
                 Outcome::Continue
             },
-            Prompt::AddArgs { name, config_dir } => {
-                Outcome::Commit(Box::new(move |profiles| profiles.add(StoredProfile { name, program: String::new(), config_dir, args: split_args(&value), env: Vec::new() })))
+            Prompt::AddConfigDir { name, program } => {
+                self.ask(Prompt::AddArgs { name, program, config_dir: value }, String::new());
+                Outcome::Continue
+            },
+            Prompt::AddArgs { name, program, config_dir } => {
+                Outcome::Commit(Box::new(move |profiles| profiles.add(StoredProfile { name, program: stored_program(&program), config_dir, args: split_args(&value), env: Vec::new() })))
             },
             Prompt::Rename(index) => Outcome::Commit(Box::new(move |profiles| profiles.rename(index, &value))),
-            Prompt::EditConfigDir(index) => Outcome::Commit(Box::new(move |profiles| {
+            Prompt::EditProgram(index) => Outcome::Commit(Box::new(move |profiles| {
+                let Some(entry) = profiles.profiles.get_mut(index) else {
+                    return Err("no such profile".to_owned());
+                };
+                entry.program = stored_program(&value);
+                Ok(())
+            })),
+            Prompt::EditConfigDir { index, .. } => Outcome::Commit(Box::new(move |profiles| {
                 let Some(entry) = profiles.profiles.get_mut(index) else {
                     return Err("no such profile".to_owned());
                 };
@@ -226,10 +267,17 @@ impl Editor {
 impl Prompt {
     fn index(&self) -> Option<usize> {
         match self {
-            Self::Rename(index) | Self::EditConfigDir(index) | Self::EditArgs(index) => Some(*index),
-            Self::AddName | Self::AddConfigDir { .. } | Self::AddArgs { .. } => None,
+            Self::Rename(index) | Self::EditProgram(index) | Self::EditConfigDir { index, .. } | Self::EditArgs(index) => Some(*index),
+            Self::AddName | Self::AddProgram { .. } | Self::AddConfigDir { .. } | Self::AddArgs { .. } => None,
         }
     }
+}
+
+/// The default CLI is stored as nothing, which is what an unwritten `program`
+/// field already means -- so a profile does not start naming `claude` just
+/// because the prompt showed it.
+fn stored_program(value: &str) -> String {
+    if value.trim() == profile::DEFAULT_PROGRAM { String::new() } else { value.trim().to_owned() }
 }
 
 /// Arguments are typed as one line, which cannot carry a quoted argument with a

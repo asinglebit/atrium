@@ -77,7 +77,7 @@ atrium worktree list         # what this repository owns
 
 Started with nothing to go on, atrium **opens on a splash** listing what it can
 hold — the harnesses from `profiles.json`, plus every CLI it knows and finds
-**installed**: `claude`, `opencode`, `codex`. Enter holds the selected one in the
+**installed**: `claude`, `opencode`, `copilot`, `codex`. Enter holds the selected one in the
 directory you started in. Given `--profile` or a command, it skips the splash and
 holds that, because you already said.
 
@@ -214,11 +214,12 @@ not rebindable.
 
 **Profiles are not in here.** A profile is a CLI plus what it needs to be
 launched with — for a Claude subscription, a `CLAUDE_CONFIG_DIR` and a flag or
-two. They are added, renamed and deleted in `ctrl+space` `?` → profiles, and atrium
+two. Which variable a profile's `config_dir` sets follows the CLI: copilot keeps
+its configuration under `COPILOT_HOME` instead. They are added, renamed and deleted in `ctrl+space` `?` → profiles, and atrium
 keeps them in `profiles.json` of its own, because rewriting `config.toml` would
 lose your comments. `~` and `$VAR` are stored as you type them and expanded only
 on the way to an agent, so the file stays portable. Beside them you get whatever
-of `claude`, `opencode` and `codex` is on your `PATH` and not already named by a
+of `claude`, `opencode`, `copilot` and `codex` is on your `PATH` and not already named by a
 profile — `--check-config` and `ctrl+space` `?` → profiles both say what was
 found and where. Inside `ctrl+space` `n`, `tab` cycles the lot.
 
@@ -226,7 +227,8 @@ Themes are easier picked than typed: `ctrl+space` `?` opens settings, where the 
 tab lists all sixty and Enter applies one. Individual colours are **not** set
 in `config.toml`: they live in `theme.json`. **The agents wear it too**: claude
 and opencode are both told, and a claude already running follows the change
-without being restarted.
+without being restarted. copilot is not, because it has nothing to be told —
+see below.
 
 `--check-config` names anything it could not use rather than failing silently.
 Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
@@ -248,7 +250,7 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/app/draw/splash.rs` | What atrium shows while it holds nothing: the wordmark, and what it could hold |
 | `src/helpers/logo.rs` | The wordmark, and which size a width gets |
 | `src/core/layout_config.rs` | The one thing atrium writes back: the sidebar's width, in `layout.json` |
-| `src/adapters/` | Per-CLI launch, status and theme wiring — `claude`, `opencode`, and a stub for `codex` |
+| `src/adapters/` | Per-CLI launch, status and theme wiring — `claude`, `copilot`, `opencode`, and a stub for `codex` |
 | `src/ipc/server.rs` | The unix socket agents report back through |
 | `src/ipc/hook.rs` | The other end: `atrium hook <Event>` |
 | `src/app/draw/` | The sidebar, the stage, the settings view, the menu and the modals |
@@ -315,7 +317,7 @@ that already existed does the job and the modal gained no new key. A profile
 whose name is its program renders as just `claude`, and tags no row — otherwise
 every row would carry the same word and say nothing.
 
-**What is installed is discovered, not declared.** atrium knows three CLIs and
+**What is installed is discovered, not declared.** atrium knows four CLIs and
 looks for them on `PATH` rather than asking you to write down that you have
 them: what it finds is offered beside your profiles, so an `opencode` install
 needs no configuration at all to show up on the splash. Two rules keep the list
@@ -379,6 +381,14 @@ untouched; editing that file instead would have meant owning it. Colours cross a
 `#rrggbb` or as a bare number for the terminal's own sixteen — the honest answer
 for the `ansi` preset, though opencode then draws its own idea of each index
 rather than asking the terminal.
+
+**copilot has no theme to be given, and that is the honest answer.** What it has
+is a colour *mode* — one of `default`, `github`, `dim`, `high-contrast`,
+`colorblind` — and none of the five is a palette atrium could fill in; mapping
+sixty themes onto them would be a mapping atrium invented. The setting also
+lives as a key inside a `settings.json` you write, where every other theme
+atrium writes is a file of its own name that overwrites nothing. So atrium
+writes nothing, and a copilot wears its own colours.
 
 **Switching theme catches the agents already held**, which is the only part of
 this that is not launch-time. claude watches its theme file and repaints on the
@@ -478,6 +488,17 @@ agent that wrote it.
 **A hook that fails is a hook that interrupts the agent.** `atrium hook` never
 reports an error: no socket, no env, a dead atrium — it exits 0 and says
 nothing. A missed status update is not worth disturbing a conversation over.
+
+**copilot reports too, through a plugin atrium generates and hands over as
+`--plugin-dir`** — the same trade as claude's `--settings`, so a copilot started
+outside atrium is untouched. Its `notification` event is what it raises for a
+permission prompt or a question of its own, which is the "needs you" the sidebar
+exists to show; `agentStop`, `errorOccurred` and the rest fill in the others.
+copilot spells its events differently, so the adapter translates them into the
+words atrium already understands rather than teaching the core a second
+vocabulary. Its hook command is a **shell string** with no exec form to fall
+back on, so the path is single-quoted and any quote in it is closed, escaped and
+reopened — the hazard claude's `args` made impossible, met head on instead.
 
 **Every agent is resized, not just the focused one.** A background agent whose
 pty still thinks it is the old size renders wrong for a frame when you switch to

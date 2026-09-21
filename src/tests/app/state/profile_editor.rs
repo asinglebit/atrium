@@ -18,6 +18,15 @@ fn typed(editor: &mut Editor, text: &str) {
     }
 }
 
+/// Walks the action list to the one named, so a test says which action it
+/// picked rather than how many times it pressed down.
+fn select(editor: &mut Editor, action: Action) {
+    let steps = Action::ALL.iter().position(|candidate| *candidate == action).expect("an action that is on the list");
+    for _ in 0..steps {
+        editor.move_down();
+    }
+}
+
 fn input_of(editor: &Editor) -> String {
     match &editor.step {
         Step::Asking { input, .. } => input.clone(),
@@ -40,6 +49,9 @@ fn adding_guesses_the_directory_from_the_name() {
 
     editor.confirm(&StoredProfiles::default());
 
+    // Name, then program, then the directory the convention would put it in.
+    editor.confirm(&StoredProfiles::default());
+
     assert_eq!(input_of(&editor), "~/.claude-personal", "the convention is prefilled so enter is enough");
 }
 
@@ -49,6 +61,7 @@ fn adding_chains_name_then_directory_then_args() {
     let mut editor = Editor::add();
 
     typed(&mut editor, "work");
+    editor.confirm(&profiles);
     editor.confirm(&profiles);
     editor.confirm(&profiles);
     typed(&mut editor, "--append-system-prompt-file /etc/p.md");
@@ -89,6 +102,7 @@ fn a_name_already_taken_is_refused_when_it_is_applied() {
     typed(&mut editor, "work");
     editor.confirm(&profiles);
     editor.confirm(&profiles);
+    editor.confirm(&profiles);
 
     assert!(apply(editor.confirm(&profiles), &mut profiles).is_err());
     assert_eq!(profiles.profiles.len(), 2, "nothing should have been appended");
@@ -127,7 +141,7 @@ fn setting_the_default_moves_it() {
 fn renaming_prefills_with_the_name_it_has() {
     let profiles = both();
     let mut editor = Editor::manage(0);
-    editor.move_down();
+    select(&mut editor, Action::Rename);
 
     editor.confirm(&profiles);
 
@@ -138,7 +152,7 @@ fn renaming_prefills_with_the_name_it_has() {
 fn renaming_applies_to_the_profile_it_was_opened_on() {
     let mut profiles = both();
     let mut editor = Editor::manage(0);
-    editor.move_down();
+    select(&mut editor, Action::Rename);
     editor.confirm(&profiles);
 
     typed(&mut editor, "s");
@@ -152,8 +166,7 @@ fn renaming_applies_to_the_profile_it_was_opened_on() {
 fn editing_the_directory_prefills_and_keeps_what_is_typed_raw() {
     let mut profiles = both();
     let mut editor = Editor::manage(0);
-    editor.move_down();
-    editor.move_down();
+    select(&mut editor, Action::EditConfigDir);
     editor.confirm(&profiles);
 
     assert_eq!(input_of(&editor), "~/.claude-work");
@@ -170,9 +183,7 @@ fn editing_args_prefills_with_them_joined_and_splits_them_back() {
         profiles: vec![StoredProfile { name: "work".to_owned(), program: String::new(), config_dir: String::new(), args: vec!["--a".to_owned(), "--b".to_owned()], env: Vec::new() }],
     };
     let mut editor = Editor::manage(0);
-    for _ in 0..3 {
-        editor.move_down();
-    }
+    select(&mut editor, Action::EditArgs);
     editor.confirm(&profiles);
 
     assert_eq!(input_of(&editor), "--a --b");
@@ -186,9 +197,7 @@ fn editing_args_prefills_with_them_joined_and_splits_them_back() {
 fn deleting_asks_first() {
     let profiles = both();
     let mut editor = Editor::manage(0);
-    for _ in 0..4 {
-        editor.move_down();
-    }
+    select(&mut editor, Action::Delete);
 
     let outcome = editor.confirm(&profiles);
 
@@ -200,9 +209,7 @@ fn deleting_asks_first() {
 fn confirming_a_delete_removes_it_and_moves_the_default() {
     let mut profiles = both();
     let mut editor = Editor::manage(0);
-    for _ in 0..4 {
-        editor.move_down();
-    }
+    select(&mut editor, Action::Delete);
     editor.confirm(&profiles);
 
     apply(editor.confirm(&profiles), &mut profiles).expect("commit");
@@ -224,15 +231,17 @@ fn esc_backs_out_of_the_whole_thing() {
 fn every_prompt_says_what_it_wants() {
     for prompt in [
         Prompt::AddName,
-        Prompt::AddConfigDir { name: "w".to_owned() },
-        Prompt::AddArgs { name: "w".to_owned(), config_dir: "d".to_owned() },
+        Prompt::AddProgram { name: "w".to_owned() },
+        Prompt::AddConfigDir { name: "w".to_owned(), program: "claude".to_owned() },
+        Prompt::AddArgs { name: "w".to_owned(), program: "claude".to_owned(), config_dir: "d".to_owned() },
         Prompt::Rename(0),
-        Prompt::EditConfigDir(0),
+        Prompt::EditProgram(0),
+        Prompt::EditConfigDir { index: 0, program: "claude".to_owned() },
         Prompt::EditArgs(0),
     ] {
         assert!(!prompt.title().is_empty());
     }
-    assert!(Prompt::AddArgs { name: String::new(), config_dir: String::new() }.title().contains("split"), "the lossy bit has to be said out loud");
+    assert!(Prompt::AddArgs { name: String::new(), program: String::new(), config_dir: String::new() }.title().contains("split"), "the lossy bit has to be said out loud");
 }
 
 #[test]

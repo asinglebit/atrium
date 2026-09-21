@@ -26,13 +26,26 @@ themes tab lists all 60 and `enter` applies one. `config.toml` takes a preset
 ## The theme reaches the agents too
 
 An agent paints its own cells, so atrium's palette would normally stop at the
-frame. Both CLIs atrium knows how to theme are told instead, and every agent it
+frame. The CLIs atrium knows how to theme are told instead, and every agent it
 holds is launched wearing the selected theme.
 
 | | Where the theme goes | Picked by | A change while running |
 | --- | --- | --- | --- |
 | claude | `<CLAUDE_CONFIG_DIR>/themes/atrium.json` | `"theme": "custom:atrium"` in the `--settings` document | **Followed** — claude watches the file and repaints |
 | opencode | `~/.config/opencode/themes/atrium.json` | `~/.config/atrium/opencode-tui.json`, handed over as `OPENCODE_TUI_CONFIG` | Not followed; the next opencode gets it |
+| copilot | nowhere | — | — |
+
+## Copilot keeps its own
+
+copilot has no themes to write. What it has is a **colour mode** — one of
+`default`, `github`, `dim`, `high-contrast`, `colorblind` — and none of the five
+is a palette atrium could fill in. Mapping sixty themes onto five fixed modes
+would be a mapping atrium invented rather than one that means anything.
+
+The setting also lives as a key inside `settings.json`, a file you write. Every
+other theme atrium writes is a file of its own name, in its own place, that
+overwrites nothing; there is no such file here, so atrium writes none. A copilot
+in its own colours is not a broken copilot.
 
 ## Claude
 
