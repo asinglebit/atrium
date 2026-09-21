@@ -471,6 +471,21 @@ outside atrium is completely unaffected and the global config is never written.
 The agent also carries `ATRIUM_AGENT_ID` and `ATRIUM_SOCK` in its environment,
 which is how `atrium hook` knows who it is and where to report.
 
+**One bell rings for eleven things, so one event is narrowed.** `Notification`
+is the only claude event that means several unrelated things: a permission
+prompt and a question of its own, but also "you have not typed in a while",
+"the turn is finished", "you signed in", and three about quota. Registered bare
+it turned a row blue the moment a turn ended, and left it pulsing there —
+indistinguishable from an agent actually blocked on a prompt, which is the one
+thing the colour exists to say. It carries a `matcher` now naming the four that
+mean you, so the discriminating happens **in claude**: `atrium hook` goes on
+taking its event name as an argument and goes on reading no payload at all.
+
+**The row on the stage does not pulse.** The pulse pulls your eye to a row you
+are not looking at, and that is the one row you are. It keeps its colour and its
+status, so the tmuxbar segment stays honest and glancing at an agent without
+answering it does not lose the reminder — only the flashing stops.
+
 **The hook handler is registered in exec form, and that is a correctness fix,
 not a preference.** Claude's `command` field is a shell string. Written that
 way, a binary path containing a quote escapes its own quoting —

@@ -23,6 +23,37 @@ fn the_settings_name_every_registered_event() {
 }
 
 #[test]
+fn only_the_notifications_that_mean_you_are_registered() {
+    let json = settings_json("/usr/bin/atrium", None);
+
+    assert!(json.contains(&format!(r#""Notification":[{{"matcher":"{NEEDS_YOU}","hooks":"#)), "got: {json}");
+}
+
+#[test]
+fn the_notifications_that_do_not_mean_you_are_left_out() {
+    // Claude rings the same bell for these, and registered bare they turned a
+    // row blue the moment a turn ended -- which is what the colour was supposed
+    // to be distinguishable from.
+    let json = settings_json("/usr/bin/atrium", None);
+    for kind in ["idle_prompt", "agent_completed", "auth_success", "quota_auto_resume_fired"] {
+        assert!(!json.contains(kind), "{kind} should not be worth pulling you over for: {json}");
+    }
+}
+
+#[test]
+fn nothing_else_is_narrowed() {
+    assert_eq!(settings_json("/usr/bin/atrium", None).matches(r#""matcher""#).count(), 1, "only Notification is told everything and asked for some of it");
+}
+
+#[test]
+fn the_matcher_stays_on_claudes_exact_match_path() {
+    // Letters, digits, `_` and `|` are compared as exact alternatives. One
+    // character outside that set turns the whole thing into an unanchored
+    // regex, which would match any type merely containing one of these words.
+    assert!(NEEDS_YOU.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '|'), "{NEEDS_YOU}");
+}
+
+#[test]
 fn hooks_are_async_so_they_never_hold_the_agent_up() {
     assert_eq!(settings_json("/usr/bin/atrium", None).matches(r#""async":true"#).count(), HOOK_EVENTS.len());
 }

@@ -16,6 +16,13 @@ on the dark half of the beat they drop to `COLOR_GREY_600` and come back. The
 other three are settled, so nothing about them moves. Green is a finished agent
 rather than an absent one, which is why idle is the colour for everything done.
 
+**The row on the stage never pulses**, wherever it is drawn -- the sidebar, the
+goto list, the status line. The pulse is there to pull your eye to a row you are
+not looking at, and that is the one row you are. It keeps its colour and its
+status: the row is still blue, the tmuxbar segment still says `needs-input`, and
+glancing at an agent without answering it does not lose the reminder. Only the
+flashing stops.
+
 A working agent spins where the others show a steady glyph — six frames at
 100ms, derived from elapsed time rather than driven by a thread, because the
 draw loop already runs often enough to animate it. Its row therefore both spins
@@ -54,12 +61,27 @@ but only watched.
 | --- | --- |
 | `SessionStart`, `Stop` | `Idle` |
 | `UserPromptSubmit` | `Working` |
-| `Notification`, `PermissionRequest` | `NeedsInput` |
+| `Notification` (narrowed), `PermissionRequest` | `NeedsInput` |
 | `PostToolUse`, `PermissionDenied` | lifts `NeedsInput`, nothing else |
 | `StopFailure` | `Error` |
 | `SessionEnd` | `Exited` |
 
 Unknown events are ignored rather than guessed at.
+
+### Not every Notification means you
+
+Claude rings `Notification` for eleven different things: a permission prompt and
+a question of its own, but also "you have not typed in a while", "the turn is
+finished", "you signed in", and three about quota. Registered bare, all eleven
+read as `NeedsInput` -- so a row turned blue the moment a turn ended and pulsed
+there until it was answered, which is exactly the state the colour was supposed
+to be distinguishable from.
+
+It is registered with a **matcher** now, naming the four that mean you:
+`permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog`,
+`agent_needs_input`. The matcher does the telling apart inside claude, so the
+handler still takes its event name as an argument and still reads no payload.
+See [[Adapters and hooks]].
 
 ## Two events that only lift a wait
 

@@ -46,6 +46,29 @@ Nine events are registered, one hook each: `SessionStart`, `UserPromptSubmit`,
 `Notification`, `PermissionRequest`, `PostToolUse`, `PermissionDenied`, `Stop`,
 `StopFailure`, `SessionEnd`. See [[Status]] for what each one means.
 
+### One of them is narrowed, because one bell rings for eleven things
+
+`Notification` is claude's only event that means several unrelated things: a
+permission prompt and a question of its own, but also "you have not typed in a
+while", "the turn is finished", "you signed in", and three about quota.
+Registered bare it turned a row [[Status|blue]] the moment a turn ended.
+
+It carries a `matcher` now:
+
+```
+"Notification":[{"matcher":"permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input","hooks":[…]}]
+```
+
+The matcher sits beside `hooks` rather than inside one, and it is the **only**
+entry in the document that has one. Letters, digits, `_` and `|` are compared by
+claude as exact alternatives; one character outside that set would turn the
+whole thing into an unanchored regex that matched anything merely containing one
+of these words, so a test asserts the spelling stays on the exact-match path.
+
+This is the shape of the thing: the discriminating happens **in claude**, which
+is what lets `atrium hook` go on taking its event name as an argument and go on
+reading no payload at all.
+
 ### Exec form is a correctness fix, not a preference
 
 Claude's `command` field is a shell string. Written that way, a binary path

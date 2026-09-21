@@ -323,7 +323,7 @@ impl App {
                 }
             }
             let pending = self.action_mode.then(|| self.keymap.action.label());
-            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme, lit, pending.as_deref());
+            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme, pending.as_deref());
         }
 
         match &self.modal {

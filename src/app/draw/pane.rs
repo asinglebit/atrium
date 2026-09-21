@@ -102,6 +102,10 @@ pub fn draw_gutter(frame: &mut Frame, area: Rect, theme: &Theme, total: usize, v
 /// nothing about them will change on its own -- so they ignore it and hold
 /// their colour.
 ///
+/// The agent **on the stage** is passed a `lit` that is always true, wherever it
+/// is drawn. The pulse is there to pull your eye to a row you are not looking
+/// at, and that is the one row you are.
+///
 /// The pulse is drawn rather than asked for. `Modifier::SLOW_BLINK` emits SGR 5,
 /// which ghostty parses and ignores, so anything that has to blink here has to
 /// blink by being drawn two ways.
@@ -128,6 +132,7 @@ const MIN_NAME_WIDTH: usize = 8;
 /// One line per held agent: status mark, jump number, name, and branch. Shared
 /// so the sidebar and the goto list cannot drift apart.
 pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, lit: bool, width: usize) -> Vec<Line<'a>> {
+    let focused = registry.focus();
     let branches: Vec<String> = registry.agents().iter().map(|agent| agent.git().map(|git| format!("{}{}", git.branch, if git.dirty { "*" } else { "" })).unwrap_or_default()).collect();
     let profiles: Vec<String> = registry.agents().iter().map(|agent| agent.profile.clone().unwrap_or_default()).collect();
 
@@ -164,7 +169,7 @@ pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, lit: b
             let body = if agent.has_exited() { theme.COLOR_GREY_600 } else { theme.COLOR_GREY_300 };
 
             let mut spans = vec![
-                Span::styled(format!("{mark} "), status_style(theme, agent.status, lit)),
+                Span::styled(format!("{mark} "), status_style(theme, agent.status, lit || index == focused)),
                 Span::styled(key, Style::default().fg(theme.COLOR_GREY_600)),
                 Span::styled(format!("{:<name_width$}", truncate(&agent.name, name_width)), Style::default().fg(body)),
             ];
@@ -178,3 +183,7 @@ pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, lit: b
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "../../tests/app/draw/pane.rs"]
+mod tests;

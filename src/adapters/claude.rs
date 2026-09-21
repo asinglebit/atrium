@@ -13,6 +13,27 @@ use crate::{
 /// instead of parsing Claude's payload.
 pub const HOOK_EVENTS: [&str; 9] = ["SessionStart", "UserPromptSubmit", "Notification", "PermissionRequest", "PostToolUse", "PermissionDenied", "Stop", "StopFailure", "SessionEnd"];
 
+/// Which `Notification`s are worth pulling you over for.
+///
+/// Claude rings one bell for eleven different things: a permission prompt and a
+/// question of its own, but also "you have not typed in a while", "the turn is
+/// finished", "you signed in", and three about quota. Registered bare, all
+/// eleven read as "needs you" -- so a row turned blue the moment a turn ended
+/// and pulsed there until it was answered, which is the one state the colour
+/// was supposed to distinguish itself from.
+///
+/// The matcher tells them apart **in claude**, so the handler still takes its
+/// event name as an argument and still reads no payload. Letters, `_` and `|`
+/// only, which is claude's exact-match path: these four spellings, and nothing
+/// that merely contains one.
+const NEEDS_YOU: &str = "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input";
+
+/// What an event is narrowed to, for the one event where being told everything
+/// is worse than being told some of it.
+fn matcher_for(event: &str) -> Option<&'static str> {
+    (event == "Notification").then_some(NEEDS_YOU)
+}
+
 /// What atrium's theme is filed under. Claude reads a user theme from
 /// `<config dir>/themes/<slug>.json` and names it `custom:<slug>`.
 const THEME_SLUG: &str = "atrium";
@@ -50,7 +71,8 @@ impl AgentKind for ClaudeCode {
 }
 
 /// One hook per event, all pointing back at `atrium hook <event>`, and the
-/// theme when there is one to name.
+/// theme when there is one to name. `Notification` is narrowed to the kinds
+/// that mean you -- see `NEEDS_YOU`.
 ///
 /// `args` puts this in exec form, which runs the handler directly instead of
 /// through a shell -- so a path containing a space or a quote cannot be
@@ -58,7 +80,13 @@ impl AgentKind for ClaudeCode {
 /// the thing it was doing.
 pub fn settings_json(exe: &str, theme: Option<&str>) -> String {
     let exe = json::escape(exe);
-    let entries: Vec<String> = HOOK_EVENTS.iter().map(|event| format!(r#""{event}":[{{"hooks":[{{"type":"command","command":"{exe}","args":["hook","{event}"],"async":true}}]}}]"#)).collect();
+    let entries: Vec<String> = HOOK_EVENTS
+        .iter()
+        .map(|event| {
+            let narrowed = matcher_for(event).map(|types| format!(r#""matcher":"{types}","#)).unwrap_or_default();
+            format!(r#""{event}":[{{{narrowed}"hooks":[{{"type":"command","command":"{exe}","args":["hook","{event}"],"async":true}}]}}]"#)
+        })
+        .collect();
     let theme = theme.map(|slug| format!(r#","theme":"custom:{}""#, json::escape(slug))).unwrap_or_default();
     format!(r#"{{"hooks":{{{}}}{theme}}}"#, entries.join(","))
 }
