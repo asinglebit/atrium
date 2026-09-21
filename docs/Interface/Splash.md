@@ -63,8 +63,8 @@ picture as one with room left around it:
 
 | Columns | What is drawn |
 | --- | --- |
-| 120 and up | The wordmark drawn out, fourteen rows, tail and all |
-| 80 to 119 | The same word at half the height, seven rows |
+| 106 and up | The wordmark drawn out, fourteen rows, tail and all |
+| 80 to 105 | The same word at half the height, seven rows |
 | below 80 | The word `atriuɱ`, whose hooked `m` is that tail kept at one row |
 
 The top 30% take the lighter of two purples and the rest the darker — guitar

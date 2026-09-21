@@ -51,7 +51,7 @@ pub const COMPACT: &str = "atriuɱ";
 /// Where the splash changes wordmark. Guitar's two breakpoints, not the widths
 /// the art happens to need: a wordmark reaching the edges of the terminal is
 /// not the same picture as one with room left around it.
-const WIDE_COLUMNS: usize = 120;
+const WIDE_COLUMNS: usize = 106;
 const NARROW_COLUMNS: usize = 80;
 
 /// How many of `total` rows take the lighter tone: the top 30%, rounded up so a
