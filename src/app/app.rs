@@ -19,6 +19,7 @@ use crate::{
             layout,
             layout::Layout,
             menu::{Action, Menu},
+            mode::{Mode, Step},
             picker::Picker,
             profile_editor::{Editor, Outcome},
             settings::{SelectionKind, Settings},
@@ -103,7 +104,7 @@ pub struct App {
     /// True between the prefix and the key that follows it. Nothing else in
     /// atrium is modal, so this is the only place a keystroke means something
     /// other than itself.
-    action_mode: bool,
+    mode: Mode,
     should_quit: bool,
 }
 
@@ -185,7 +186,7 @@ impl App {
             published: None,
             pulsed: None,
             watch: worktree::Watch::new(),
-            action_mode: false,
+            mode: Mode::default(),
             should_quit: false,
         })
     }
@@ -324,8 +325,8 @@ impl App {
                     draw::stage::draw(frame, layout.stage, agent.session(), &self.theme);
                 }
             }
-            let pending = self.action_mode.then(|| self.keymap.action.label());
-            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme, pending.as_deref());
+            let leave = self.mode.is_on().then(|| self.keymap.leave.label());
+            draw::statusbar::draw(frame, &layout, &self.registry, &self.theme, leave.as_deref());
         }
 
         match &self.modal {
@@ -379,6 +380,13 @@ impl App {
         // is the agent's, like every other chord behind the prefix.
         let key = if self.owns_keyboard() { keymap::as_arrow(key) } else { key };
 
+        // A surface takes the keyboard for itself, so the mode ends as one opens
+        // -- by key or by mouse. Left on underneath, it would put you back in it
+        // on the way out, which is not where you were going.
+        if self.surface_open() {
+            self.mode.release();
+        }
+
         if self.profile_editor.is_some() {
             self.on_editor_key(key);
             return Ok(());
@@ -399,18 +407,20 @@ impl App {
             },
             None => {},
         }
-        // The prefix was pressed, so this key is atrium's whatever it is. One
-        // that means nothing cancels rather than falling through to the agent:
-        // half a mistyped gesture landing in a conversation is worse than
-        // nothing happening.
-        if self.action_mode {
-            self.action_mode = false;
-            self.take_action(&key);
-            return Ok(());
-        }
-        if self.keymap.action.matches(&key) {
-            self.action_mode = true;
-            return Ok(());
+        // On the splash atrium already has the keyboard, so there is nothing to
+        // jump out of: the chord reaches the actions once and the mode ends with
+        // it, the way it used to everywhere.
+        let sticky = !self.registry.is_empty();
+        match self.mode.step(&key, &self.keymap, sticky) {
+            // While atrium has the keys, one that means nothing is swallowed
+            // rather than falling through to the agent: half a mistyped gesture
+            // landing in a conversation is worse than nothing happening.
+            Step::Act => {
+                self.take_action(&key);
+                return Ok(());
+            },
+            Step::Entered | Step::Left => return Ok(()),
+            Step::Pass => {},
         }
         // With nothing held there is no agent for a key to reach, so the splash
         // takes it instead.
@@ -420,10 +430,16 @@ impl App {
         self.send(key)
     }
 
+    /// True while one of atrium's own surfaces is up and taking keys for itself:
+    /// a modal, the settings view, the menu, the profile editor.
+    fn surface_open(&self) -> bool {
+        self.profile_editor.is_some() || self.menu.is_some() || self.settings.is_some() || self.modal.is_some()
+    }
+
     /// True while something of atrium's is taking keys rather than the agent: a
-    /// modal, the settings view, the menu, or the splash with nothing held.
+    /// surface, or the splash with nothing held.
     fn owns_keyboard(&self) -> bool {
-        self.profile_editor.is_some() || self.menu.is_some() || self.settings.is_some() || self.modal.is_some() || self.registry.is_empty()
+        self.surface_open() || self.registry.is_empty()
     }
 
     /// True when the key meant something. Everything reaches the agent now, so
@@ -838,6 +854,8 @@ impl App {
         self.registry.dismiss_at(index);
         if self.registry.is_empty() {
             self.splash = Splash::new(self.profiles.len(), self.default_profile);
+            // The splash takes bare keys of its own, so there is no mode to be in.
+            self.mode.release();
         }
     }
 

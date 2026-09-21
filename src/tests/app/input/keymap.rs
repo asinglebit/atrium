@@ -226,7 +226,7 @@ fn a_key_that_means_nothing_names_no_action() {
     // The caller cancels on None rather than passing it on, so half a mistyped
     // gesture cannot land in a conversation.
     assert!(Keymap::default().action_for(&press(KeyCode::Char('z'), KeyModifiers::NONE)).is_none());
-    assert!(Keymap::default().action_for(&press(KeyCode::Esc, KeyModifiers::NONE)).is_none());
+    assert_eq!(Keymap::default().action_for(&press(KeyCode::Esc, KeyModifiers::NONE)), Some("leave"), "esc is the way out of the mode");
 }
 
 #[test]

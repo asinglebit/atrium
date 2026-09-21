@@ -101,6 +101,9 @@ fn key_name(code: KeyCode) -> String {
 pub struct Keymap {
     /// The one chord atrium takes from the agent. Everything else follows it.
     pub action: Chord,
+    /// The way back out. Only ever read while atrium has the keyboard, so it
+    /// costs the agent nothing to have it be a key the agent also uses.
+    pub leave: Chord,
     pub quit: Chord,
     pub goto: Chord,
     pub settings: Chord,
@@ -125,7 +128,18 @@ fn shift(c: char) -> Chord {
 
 impl Default for Keymap {
     fn default() -> Self {
-        Self { action: ctrl(' '), quit: key('q'), goto: key(' '), settings: key('?'), sidebar: shift('1'), new: key('n'), dismiss: key('x'), next: key('j'), previous: key('k') }
+        Self {
+            action: ctrl(' '),
+            leave: Chord::plain(KeyCode::Esc),
+            quit: key('q'),
+            goto: key(' '),
+            settings: key('?'),
+            sidebar: shift('1'),
+            new: key('n'),
+            dismiss: key('x'),
+            next: key('j'),
+            previous: key('k'),
+        }
     }
 }
 
@@ -134,6 +148,7 @@ impl Keymap {
     pub fn set(&mut self, action: &str, chord: Chord) -> bool {
         match action {
             "action" => self.action = chord,
+            "leave" => self.leave = chord,
             "quit" => self.quit = chord,
             "goto" => self.goto = chord,
             "settings" => self.settings = chord,
@@ -148,8 +163,9 @@ impl Keymap {
     }
 
     /// Every action with the name the config file uses, for the settings list.
-    pub fn actions(&self) -> [(&'static str, Chord); 8] {
+    pub fn actions(&self) -> [(&'static str, Chord); 9] {
         [
+            ("leave", self.leave),
             ("new", self.new),
             ("goto", self.goto),
             ("next", self.next),
@@ -170,6 +186,14 @@ impl Keymap {
     /// How a binding is written out for a reader: the prefix, then the key.
     pub fn gesture(&self, chord: Chord) -> String {
         format!("{} {}", self.action.label(), chord.label())
+    }
+
+    /// The same, for a list that names its actions. The way out is the one key
+    /// not reached through the prefix -- it is pressed on its own, once atrium
+    /// already has the keyboard -- so quoting it with the prefix would be
+    /// telling someone to press a key that does something else.
+    pub fn gesture_for(&self, action: &str, chord: Chord) -> String {
+        if action == "leave" { chord.label() } else { self.gesture(chord) }
     }
 
     /// The action this key runs, once the prefix has been pressed.

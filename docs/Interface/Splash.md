@@ -45,6 +45,11 @@ intention.
 The gestures still work: `ctrl+space` `n` opens the [[Modals|project picker]]
 instead, `ctrl+space` `?` opens [[Settings]], `ctrl+space` `q` quits.
 
+Here `ctrl+space` is a **prefix rather than a mode**, unlike everywhere else —
+see [[Keys]]. atrium already has the keyboard on the splash, so there is nothing
+to jump out of: the chord reaches one action and ends with it, which leaves
+`j`/`k` to this list rather than to the agents there are none of.
+
 A launch that fails — a profile whose program has been uninstalled since the
 scan — leaves its message above the list rather than taking atrium down, and the
 list shifts down to make room for it. The [[Modals|picker]] keeps a failed launch

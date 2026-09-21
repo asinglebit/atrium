@@ -24,7 +24,8 @@ All of it optional:
 name = "one dark warmer"   # any of the 60 preset names
 
 [keys]
-action = "ctrl+space"
+action = "ctrl+space"   # takes the keyboard from the agent
+leave = "esc"          # and hands it back
 quit = "q"
 goto = "space"
 settings = "?"

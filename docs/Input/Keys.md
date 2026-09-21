@@ -1,7 +1,20 @@
 # Keys
 
-**Everything you type reaches the focused agent.** atrium's own actions sit
-behind one prefix, `ctrl+space`.
+**Everything you type reaches the focused agent.** `ctrl+space` takes the
+keyboard back, and `esc` hands it over again.
+
+It is a **mode, not a prefix**: atrium keeps the keys until you leave, so a run
+of them costs one press of the chord rather than one each. Walking the sidebar
+and dropping a couple of agents is `ctrl+space` `j` `j` `x` `j` `esc` — one
+visit, not five gestures.
+
+| | Who has the keyboard | How you leave |
+| --- | --- | --- |
+| **Agent**, which is where you start | the focused agent, every keystroke | `ctrl+space` |
+| **atrium** | atrium, and the keys below mean what they say | `esc`, or `ctrl+space` again |
+
+While atrium has them the [[Stage|status line]] says **`esc to leave`**, since
+that is the half you cannot guess.
 
 | Gesture | Action |
 | --- | --- |
@@ -14,7 +27,10 @@ behind one prefix, `ctrl+space`.
 | `ctrl+space` `?` | [[Settings]] |
 | `ctrl+space` `q` | quit |
 
-The prefix and all eight actions are rebindable — see [[Configuration]], where
+Written `ctrl+space` `x` throughout, which is how you press it the first time.
+Once you are in, `x` on its own is enough.
+
+The chord, the way out and all eight actions are rebindable — see [[Configuration]], where
 the prefix is the `action` entry. The digits are not: they are the numbers
 written down the sidebar, and they mean those rows.
 
@@ -53,7 +69,7 @@ is `ctrl+shift+…`. **An input method might.** ibus and fcitx take `ctrl+space`
 to switch input language by default, and atrium would never see it — rebind
 whichever of the two you care less about.
 
-## Why a prefix, and why this one
+## Why this chord, and why it did not change
 
 atrium used to fire eight `ctrl+letter` chords directly. That meant eight keys
 an agent could never see, and the choice of defaults was the whole design:
@@ -61,8 +77,17 @@ an agent could never see, and the choice of defaults was the whole design:
 `ctrl+x` cost a two-key prefix, and so on. **They are all the agent's again.**
 
 What is left is one key. `ctrl+space` costs readline's set-mark and nothing
-else. The keys behind the prefix cost nothing either: they mean something only
-in the moment after it.
+else. The keys behind it cost nothing either: they mean something only while
+atrium has the keyboard.
+
+Turning the prefix into a mode did not make a new chord worth looking for. Every
+`ctrl`+letter costs the agent that letter outright, and the legacy encoding below
+offers nothing else — so the cheapest key there was is still the cheapest key
+there is. What changed is how often you press it.
+
+The way out is `esc`, which costs the agent nothing at all: it is read only once
+atrium already has the keyboard, so an agent that wants `esc` still gets it
+every other moment.
 
 The letters are guitar's wherever guitar has one, so the two tools do not
 disagree: `?` is settings, `x` drops a thing, `q` exits, `j`/`k` walk a list.
@@ -72,13 +97,28 @@ alt, and that the claimed one is none of `ctrl+c`, `ctrl+d`, `ctrl+z`,
 `ctrl+v`, `ctrl+l`, `ctrl+r`, `ctrl+u`, `ctrl+w`, `ctrl+e`, `ctrl+k` or
 `ctrl+[`, which is Escape.
 
-## A key that means nothing cancels
+## A key that means nothing is swallowed
 
-Press the prefix and then something unbound and nothing happens — the key is
-swallowed rather than passed on. Half a mistyped gesture landing in a
-conversation is worse than nothing happening. The [[Stage|status line]] shows
-`ctrl+space` while atrium waits for the second key, since that is the only
-moment a keystroke means something other than itself.
+Press something unbound while atrium has the keyboard and nothing happens — the
+key does not fall through to the agent, and the mode holds. Half a mistyped
+gesture landing in a conversation is worse than nothing happening, and being
+thrown out by a typo would be worse still.
+
+## Where the mode ends on its own
+
+**A surface opening ends it** — [[Settings]], the [[Modals|picker]], go to, the
+[[Context menu]], the profile editor. Each takes the keyboard for itself, and
+leaving the mode on underneath would put you back in it on the way out, which is
+not where you were going. That holds however the surface was opened, by key or
+by mouse.
+
+**Dropping the last agent ends it.** That goes to the [[Splash]], which takes
+bare keys of its own.
+
+**On the splash the chord stays a prefix.** atrium already has the keyboard
+there, so there is nothing to jump out of: `ctrl+space` `n` reaches the picker
+on one press and the mode ends with it, leaving `j`/`k` to the splash's own
+list. A mode there could only trap someone whose next key the splash wanted.
 
 ## A binding also has to be deliverable
 

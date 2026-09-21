@@ -26,6 +26,7 @@ pub mod state {
     pub mod goto;
     pub mod layout;
     pub mod menu;
+    pub mod mode;
     pub mod picker;
     pub mod profile_editor;
     pub mod settings;
