@@ -84,12 +84,13 @@ fn two_servers_in_one_process_do_not_collide() {
 
 #[test]
 fn binding_clears_sockets_left_by_an_atrium_that_never_exited() {
-    // A pid far above pid_max can never be alive, so this stands in for the
-    // socket a killed atrium leaves behind.
+    // A socket whose listener has gone but whose file has not, which is what a
+    // killed atrium leaves behind.
     let server = StatusServer::bind().expect("bind");
     let dir = server.path().parent().expect("socket dir").to_path_buf();
     let stale = dir.join("4294967294-0.sock");
-    std::fs::write(&stale, b"").expect("plant a stale socket");
+    let _ = std::fs::remove_file(&stale);
+    drop(UnixListener::bind(&stale).expect("plant a stale socket"));
     assert!(stale.exists());
 
     let second = StatusServer::bind().expect("bind again");
@@ -97,4 +98,37 @@ fn binding_clears_sockets_left_by_an_atrium_that_never_exited() {
     assert!(!stale.exists(), "a dead atrium's socket should have been swept");
     assert!(server.path().exists(), "a live atrium's socket must survive the sweep");
     assert!(second.path().exists());
+}
+
+/// The name says a pid that cannot be alive, so the only thing that can save
+/// this socket is the listener behind it. Off Linux nothing used to look, and
+/// on Linux the name was the whole of the answer.
+#[test]
+fn a_socket_someone_is_listening_on_survives_the_sweep_whatever_it_is_called() {
+    let server = StatusServer::bind().expect("bind");
+    let dir = server.path().parent().expect("socket dir").to_path_buf();
+    let live = dir.join("4294967293-0.sock");
+    let _ = std::fs::remove_file(&live);
+    let listener = UnixListener::bind(&live).expect("plant a live socket");
+
+    let second = StatusServer::bind().expect("bind again");
+
+    assert!(live.exists(), "a socket with a listener behind it must survive the sweep");
+    assert!(server.path().exists() && second.path().exists());
+
+    drop(listener);
+    let _ = std::fs::remove_file(&live);
+}
+
+#[test]
+fn a_file_that_is_not_a_socket_goes_with_the_dead_ones() {
+    let server = StatusServer::bind().expect("bind");
+    let dir = server.path().parent().expect("socket dir").to_path_buf();
+    let junk = dir.join("4294967292-0.sock");
+    std::fs::write(&junk, b"not a socket").expect("plant a file where a socket should be");
+
+    let second = StatusServer::bind().expect("bind again");
+
+    assert!(!junk.exists(), "nothing can be listening on a plain file");
+    assert!(server.path().exists() && second.path().exists());
 }

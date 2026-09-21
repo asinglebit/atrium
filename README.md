@@ -492,8 +492,10 @@ the agent twice.
 
 **Sockets from a killed atrium are swept on the way in.** An atrium that is
 `kill`ed rather than quit never runs its `Drop`, so its socket outlives it.
-Binding clears any whose pid is no longer alive, which keeps the directory from
-filling up. (This reads `/proc`, so it is a no-op off Linux.)
+Binding knocks on each one and clears the ones that refuse, which keeps the
+directory from filling up. It used to read the pid out of the name and look it
+up in `/proc` — which off Linux made every atrium read as dead, so each new one
+unlinked the sockets of the ones already running and left them deaf.
 
 **A CLI that is not installed is a message, not the end of atrium.** Picking
 `codex` when there is no codex used to return an error that propagated out of

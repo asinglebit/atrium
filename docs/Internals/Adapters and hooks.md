@@ -81,11 +81,27 @@ reboot to be mistaken for a live atrium. The counter distinguishes servers
 within one process, which the pid alone cannot do.
 
 **Stale sockets are swept on the way in.** An atrium that is `kill`ed rather
-than quit never runs its `Drop`, so its socket outlives it. Binding clears any
-whose pid is no longer alive, which keeps the directory from filling up. That
-check reads `/proc`, so it is a no-op off Linux — as is reading the uid, which
-is done from `/proc/self/status` rather than libc so the fallback path costs no
-dependency.
+than quit never runs its `Drop`, so its socket outlives it. Binding knocks on
+each socket it finds and clears the ones nobody answers for, which keeps the
+directory from filling up.
+
+Knocking is the whole of the check, and **only a refusal counts**. A connect
+that fails for want of a file descriptor, or a permission, says nothing about
+the far end — sweeping on that would unlink a living atrium's only door, and
+the cost of leaving one stale file behind is that it is swept next time.
+
+This used to read the pid out of the name and look it up in `/proc`. Off Linux
+there is no `/proc`, so every pid read as dead and **every** socket was swept,
+live ones included: each new atrium unlinked the sockets of the ones already
+running, whose agents then reported into a path nothing was listening on. Their
+statuses froze wherever they stood, which for an agent that was waiting meant a
+[[Status|"needs you"]] that pulsed for as long as the atrium was up. Knocking
+also settles the question the pid never could, since a pid the system has handed
+out again reads as alive.
+
+The uid behind the fallback directory is the owner of the home directory, taken
+with `MetadataExt::uid`. Not libc, so it still costs no dependency, and not
+`/proc/self/status`, which answered `0` for everyone off Linux.
 
 One short-lived thread serves each connection, so a client that connects and
 then stalls cannot hold up the ones behind it. The draw loop drains what has

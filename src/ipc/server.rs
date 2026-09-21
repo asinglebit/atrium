@@ -1,7 +1,10 @@
 use std::{
     fs,
-    io::{BufRead, BufReader},
-    os::unix::net::UnixListener,
+    io::{BufRead, BufReader, ErrorKind},
+    os::unix::{
+        fs::{FileTypeExt, MetadataExt},
+        net::{UnixListener, UnixStream},
+    },
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -24,9 +27,10 @@ fn socket_dir() -> PathBuf {
     }
 }
 
-/// Read from /proc rather than libc, so the fallback path costs no dependency.
+/// Whoever owns the home directory. Not libc, so the fallback path costs no
+/// dependency, and not /proc, which is a thing only Linux has.
 fn current_uid() -> u32 {
-    std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find(|l| l.starts_with("Uid:")).and_then(|l| l.split_whitespace().nth(1).and_then(|u| u.parse().ok()))).unwrap_or(0)
+    dirs::home_dir().and_then(|home| fs::metadata(home).ok()).map_or(0, |home| home.uid())
 }
 
 /// An atrium that is killed rather than quit never runs its `Drop`, so its
@@ -40,14 +44,28 @@ fn sweep_stale(dir: &Path) {
         if path.extension().is_none_or(|ext| ext != "sock") {
             continue;
         }
-        // The name is "<pid>-<n>.sock", and /proc is the cheapest liveness test.
-        let owner = path.file_stem().and_then(|stem| stem.to_str()).and_then(|stem| stem.split('-').next()).and_then(|pid| pid.parse::<u32>().ok());
-        if let Some(pid) = owner
-            && !Path::new(&format!("/proc/{pid}")).exists()
-        {
+        if abandoned(&path) {
             let _ = fs::remove_file(&path);
         }
     }
+}
+
+/// Whether a socket has nobody behind it. Knocking beats reading the pid out of
+/// the name: off Linux there is no /proc to look a pid up in, so every pid read
+/// as dead and every socket was swept -- and a pid the system has handed out
+/// again would read as alive.
+///
+/// Only a refusal is proof. A connect that fails for want of a file descriptor,
+/// or a permission, says nothing about the far end, and sweeping on it would
+/// unlink a living atrium's only door.
+fn abandoned(path: &Path) -> bool {
+    let Ok(meta) = path.metadata() else {
+        return false;
+    };
+    if !meta.file_type().is_socket() {
+        return true;
+    }
+    UnixStream::connect(path).is_err_and(|err| err.kind() == ErrorKind::ConnectionRefused)
 }
 
 /// Listens for hook callbacks and hands them to the draw loop.
