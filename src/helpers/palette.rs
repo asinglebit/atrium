@@ -3191,6 +3191,20 @@ pub fn blend(from: Color, to: Color, amount: f32) -> Color {
     Color::Rgb(mix(from_red, to_red), mix(from_green, to_green), mix(from_blue, to_blue))
 }
 
+/// A colour moved clear of a background: lighter over a dark one, deeper over a
+/// pale one, since that is the direction with room in it. Half the themes here
+/// are light and half dark, so a fixed lift would wash out on one of them --
+/// this is the same reasoning guitar's cursor line settles on.
+///
+/// A colour with no channels, or a background with none, is returned as it is.
+pub fn lift(colour: Color, background: Color, amount: f32) -> Color {
+    let Color::Rgb(red, green, blue) = background else {
+        return colour;
+    };
+    let is_dark = 0.299 * f32::from(red) + 0.587 * f32::from(green) + 0.114 * f32::from(blue) < 128.0;
+    blend(colour, if is_dark { Color::Rgb(255, 255, 255) } else { Color::Rgb(0, 0, 0) }, amount)
+}
+
 /// A ramp whose stops are all different. A theme is free to map several of its roles onto one
 /// colour -- nord publishes a single green, everforest one colour for three of these slots at once
 /// -- and a gradient built straight off those would stand still exactly where they collapse.

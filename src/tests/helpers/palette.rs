@@ -132,3 +132,57 @@ fn foregrounds_are_left_to_the_agent() {
 
     assert_eq!(buffer[(0, 0)].fg, Color::Reset, "only the background is the theme's to set");
 }
+
+/// How far apart two colours read, on the ratio the accessibility guidelines
+/// use. 4.5 is their bar for ordinary text.
+fn contrast(left: Color, right: Color) -> f32 {
+    let channel = |c: u8| {
+        let c = f32::from(c) / 255.0;
+        if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    };
+    let luminance = |colour: Color| match colour {
+        Color::Rgb(red, green, blue) => Some(0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)),
+        _ => None,
+    };
+    let (Some(left), Some(right)) = (luminance(left), luminance(right)) else {
+        return f32::MAX;
+    };
+    (left.max(right) + 0.05) / (left.min(right) + 0.05)
+}
+
+#[test]
+fn a_lifted_colour_clears_the_background_it_is_lifted_from() {
+    // The splash's selected row is the pink lifted this far. Half the themes are
+    // light and half dark, and the green it replaced washed out on twelve of
+    // them -- lifting away from the background rather than always toward white
+    // is what carries all sixty.
+    for preset in THEME_PRESETS {
+        let theme = preset.theme;
+        let background = theme.background_color();
+        let lifted = lift(theme.COLOR_PINK, background, 0.35);
+        if !matches!((lifted, background), (Color::Rgb(..), Color::Rgb(..))) {
+            continue;
+        }
+        assert!(contrast(lifted, background) >= 4.5, "{} reads the selected row at {:.1}, which is under the bar", preset.label, contrast(lifted, background));
+    }
+}
+
+#[test]
+fn a_lift_goes_away_from_the_background_whichever_end_it_is_at() {
+    let pink = Color::Rgb(236, 64, 122);
+    let brightness = |colour| match colour {
+        Color::Rgb(red, green, blue) => 0.299 * f32::from(red) + 0.587 * f32::from(green) + 0.114 * f32::from(blue),
+        _ => 0.0,
+    };
+
+    let over_dark = lift(pink, Color::Rgb(18, 18, 18), 0.35);
+    let over_pale = lift(pink, Color::Rgb(250, 244, 237), 0.35);
+
+    assert!(brightness(over_dark) > brightness(pink), "a dark theme has room upward");
+    assert!(brightness(over_pale) < brightness(pink), "a pale one has it downward");
+}
+
+#[test]
+fn a_theme_with_nothing_to_mix_keeps_its_colour() {
+    assert_eq!(lift(Color::Magenta, Color::Black, 0.35), Color::Magenta);
+}

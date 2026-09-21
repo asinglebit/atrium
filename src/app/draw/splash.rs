@@ -11,7 +11,11 @@ use ratatui::{
 use crate::{
     app::{input::keymap::Keymap, state::splash::Splash},
     core::profile::{KNOWN_PROGRAMS, Profile},
-    helpers::{logo, palette::Theme, text::truncate_with_ellipsis},
+    helpers::{
+        logo,
+        palette::{self, Theme},
+        text::truncate_with_ellipsis,
+    },
 };
 
 /// What guitar wraps its selected splash row in. Brackets rather than a
@@ -22,6 +26,11 @@ const SELECTED_RIGHT: &str = " ⏴";
 /// What the list is. atrium holds agents, so what it offers is what it can
 /// launch one as.
 const HEADING: &str = "harnesses";
+
+/// How far the selected row is carried clear of the background. Enough that the
+/// pink reads as its own colour at a glance rather than as text that happens to
+/// be tinted.
+const SELECTED_LIFT: f32 = 0.35;
 
 /// What to press, taken from the keymap rather than written down, so rebinding
 /// a key changes what the splash says it is.
@@ -78,15 +87,20 @@ pub fn draw(frame: &mut Frame, area: Rect, splash: &Splash, profiles: &[Profile]
         }
     }
 
+    // atrium's own pink rather than guitar's green, carried clear of whichever
+    // background the theme has -- light over a dark one, deep over a pale one,
+    // because a light pink on a white background is not there at all.
+    let selected = palette::lift(theme.COLOR_PINK, theme.background_color(), SELECTED_LIFT);
+
     for (index, profile) in profiles.iter().enumerate() {
         let is_selected = index == splash.selected();
-        let colour = if is_selected { theme.COLOR_GRASS } else { theme.COLOR_TEXT };
+        let colour = if is_selected { selected } else { theme.COLOR_TEXT };
         let label = Span::styled(truncate_with_ellipsis(&profile.label(), area.width as usize), Style::default().fg(colour));
 
         // Brackets rather than a highlight, so the row keeps its width and the
         // list does not shift under the cursor.
         let line = if is_selected {
-            Line::from(vec![Span::styled(SELECTED_LEFT, Style::default().fg(theme.COLOR_GRASS)), label, Span::styled(SELECTED_RIGHT, Style::default().fg(theme.COLOR_GRASS))])
+            Line::from(vec![Span::styled(SELECTED_LEFT, Style::default().fg(selected)), label, Span::styled(SELECTED_RIGHT, Style::default().fg(selected))])
         } else {
             Line::from(label)
         };
