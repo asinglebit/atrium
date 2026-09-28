@@ -26,9 +26,15 @@ fn inside_tmux_the_pane_is_reported() {
 fn needs_input_is_one_word_so_a_format_string_can_match_it() {
     assert_eq!(word(Status::NeedsInput), "needs-input");
     assert!(!word(Status::NeedsInput).contains(' '), "a space would not survive a tmux format match");
-    for status in [Status::Idle, Status::Working, Status::Error, Status::Exited] {
+    for status in [Status::Idle, Status::Working, Status::Done, Status::Error, Status::Exited] {
         assert!(!word(status).contains(' '));
     }
+}
+
+#[test]
+fn a_finished_turn_has_a_word_of_its_own() {
+    assert_eq!(word(Status::Done), "done");
+    assert_ne!(word(Status::Done), word(Status::Idle), "finished and fresh are two different things to a window");
 }
 
 #[test]
@@ -75,4 +81,53 @@ fn the_dark_half_is_the_only_thing_that_says_zero() {
     // included, so a stopped pulse can never leave a window dimmed.
     assert!(pulse_args(false).contains(&"0".to_owned()));
     assert!(!pulse_args(true).contains(&"0".to_owned()));
+}
+
+#[test]
+fn an_ending_is_marked_only_where_nobody_is_looking() {
+    let args = unseen_args("%3", Status::Done);
+
+    assert_eq!(args[..4], ["if-shell", "-F", "-t", "%3"], "the check runs inside tmux, against this pane's window");
+    assert!(args[4].contains("#{==:#{window_active_clients},0}"), "a turn that ends in front of you is seen: {}", args[4]);
+    assert_eq!(args[5], format!("set-option -p -t %3 {UNSEEN_OPTION} done"));
+}
+
+#[test]
+fn a_finish_never_covers_a_failure_still_waiting_to_be_seen() {
+    let done = unseen_args("%3", Status::Done);
+    assert!(done[4].contains(&format!("#{{!=:#{{{UNSEEN_OPTION}}},error}}")), "{}", done[4]);
+
+    let error = unseen_args("%3", Status::Error);
+    assert_eq!(error[4], "#{==:#{window_active_clients},0}", "a failure is marked over anything");
+    assert!(error[5].ends_with(" error"));
+}
+
+#[test]
+fn the_ending_rides_in_the_same_invocation_as_the_repaint() {
+    let args = announce_args("%3", Some((Some(Status::Working), counts(2, 1, 0, 0))), Some(Status::Done));
+
+    assert!(args.windows(3).any(|w| w == ["-t", "%3", STATUS_OPTION]), "the status still goes with it");
+    let marker = args.iter().position(|arg| arg == "if-shell").expect("marker");
+    let refresh = args.iter().position(|arg| arg == "refresh-client").expect("repaint");
+    assert!(marker < refresh, "before the repaint, so the repaint shows it");
+    assert_eq!(args.iter().filter(|arg| *arg == ";").count(), 3);
+}
+
+#[test]
+fn an_ending_alone_is_said_without_the_status() {
+    // One agent finishing beside another still working changes nothing else.
+    let args = announce_args("%3", None, Some(Status::Done));
+
+    assert_eq!(args[0], "if-shell");
+    assert!(!args.contains(&STATUS_OPTION.to_owned()));
+    assert_eq!(&args[args.len() - 2..], ["refresh-client", "-S"]);
+}
+
+#[test]
+fn going_away_unsays_everything_including_the_marker() {
+    let args = clear_args("%3");
+
+    assert_eq!(args.iter().filter(|arg| *arg == "-u").count(), 3, "status, agents and the unseen marker: {args:?}");
+    assert!(args.contains(&UNSEEN_OPTION.to_owned()));
+    assert_eq!(&args[args.len() - 2..], ["refresh-client", "-S"]);
 }

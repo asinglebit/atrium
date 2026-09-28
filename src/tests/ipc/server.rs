@@ -39,7 +39,7 @@ fn a_line_written_to_the_socket_arrives_as_a_report() {
     drop(stream);
 
     let reports = next_reports(&server);
-    assert_eq!(reports, vec![Report { agent_id: 9, event: "UserPromptSubmit".to_owned() }]);
+    assert_eq!(reports, vec![Report { agent_id: 9, event: "UserPromptSubmit".to_owned(), at: None }]);
 }
 
 #[test]
@@ -71,7 +71,28 @@ fn rubbish_on_the_socket_is_ignored_rather_than_crashing_the_server() {
     writeln!(stream, "garbage\n4\tStop").expect("write");
     drop(stream);
 
-    assert_eq!(next_reports(&server), vec![Report { agent_id: 4, event: "Stop".to_owned() }]);
+    assert_eq!(next_reports(&server), vec![Report { agent_id: 4, event: "Stop".to_owned(), at: None }]);
+}
+
+/// opencode's plugin keeps one connection open for the life of the agent, and
+/// counts on its lines arriving in the order it wrote them.
+#[test]
+fn lines_on_one_connection_arrive_in_order() {
+    let server = StatusServer::bind().expect("bind");
+
+    let mut stream = UnixStream::connect(server.path()).expect("connect");
+    for event in ["UserPromptSubmit", "PermissionRequest", "PostToolUse", "Stop"] {
+        writeln!(stream, "5\t{event}\t1").expect("write");
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut seen = Vec::new();
+    while seen.len() < 4 && Instant::now() < deadline {
+        seen.extend(server.drain());
+        thread::sleep(Duration::from_millis(10));
+    }
+    let events: Vec<&str> = seen.iter().map(|report| report.event.as_str()).collect();
+    assert_eq!(events, ["UserPromptSubmit", "PermissionRequest", "PostToolUse", "Stop"], "the connection was still open, and in order is the whole point");
 }
 
 #[test]

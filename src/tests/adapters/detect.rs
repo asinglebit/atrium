@@ -23,10 +23,22 @@ fn anything_else_is_still_held() {
 }
 
 #[test]
-fn only_the_ones_that_call_back_claim_to() {
-    assert_eq!(detect("claude").status_source(), StatusSource::Hooks);
-    assert_eq!(detect("copilot").status_source(), StatusSource::Hooks);
-    assert_eq!(detect("opencode").status_source(), StatusSource::Heuristic);
-    assert_eq!(detect("codex").status_source(), StatusSource::Heuristic);
+fn every_cli_atrium_knows_calls_back_and_nothing_else_claims_to() {
+    for program in KNOWN_PROGRAMS {
+        assert_eq!(detect(program).status_source(), StatusSource::Hooks, "{program}");
+    }
     assert_eq!(detect("bash").status_source(), StatusSource::Heuristic);
+}
+
+#[test]
+fn a_generated_file_is_written_whole_or_not_at_all() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("deep").join("plugin.js");
+
+    write_atomically(&path, "first").expect("write");
+    write_atomically(&path, "second").expect("rewrite");
+
+    assert_eq!(std::fs::read_to_string(&path).expect("read"), "second");
+    let left: Vec<_> = std::fs::read_dir(path.parent().expect("dir")).expect("list").flatten().map(|entry| entry.file_name()).collect();
+    assert_eq!(left.len(), 1, "no temporary file left beside it: {left:?}");
 }

@@ -92,15 +92,16 @@ pub fn draw_gutter(frame: &mut Frame, area: Rect, theme: &Theme, total: usize, v
     frame.render_stateful_widget(scrollbar, area, &mut ScrollbarState::new(length).position(offset));
 }
 
-/// How each status is drawn. The colours are drawn from guitar's palette rather
-/// than colours of atrium's own, so the two tools never disagree about what red
-/// is, and tmuxbar paints a window by the same rule -- blue for a question,
-/// orange for a wait, green for a finished agent, red for a failed one.
+/// How each status is drawn, which is how tmuxbar paints the window the agent
+/// is in: grey while there is nothing to say, a grey that flickers lighter
+/// while it works, orange while it waits on you, and green or red for a turn
+/// that finished or failed -- until it has been seen, when it drops back to
+/// grey. The colours are drawn from guitar's palette rather than colours of
+/// atrium's own, so the two tools never disagree about what red is.
 ///
-/// The two statuses that are still waiting pulse: on the dark half of the beat
-/// they drop to grey, which is `lit` being false. The other three are settled --
-/// nothing about them will change on its own -- so they ignore it and hold
-/// their colour.
+/// Working is the one status that moves: on the dark half of the beat it is
+/// the grey everything quiet wears, which is `lit` being false. Everything
+/// else holds its colour.
 ///
 /// The agent **on the stage** is passed a `lit` that is always true, wherever it
 /// is drawn. The pulse is there to pull your eye to a row you are not looking
@@ -109,15 +110,16 @@ pub fn draw_gutter(frame: &mut Frame, area: Rect, theme: &Theme, total: usize, v
 /// The pulse is drawn rather than asked for. `Modifier::SLOW_BLINK` emits SGR 5,
 /// which ghostty parses and ignores, so anything that has to blink here has to
 /// blink by being drawn two ways.
-pub fn status_style(theme: &Theme, status: Status, lit: bool) -> Style {
-    let (color, pulses) = match status {
-        Status::Idle => (theme.COLOR_GREEN, false),
-        Status::Working => (theme.COLOR_ORANGE, true),
-        Status::NeedsInput => (theme.COLOR_BLUE, true),
-        Status::Error => (theme.COLOR_RED, false),
-        Status::Exited => (theme.COLOR_GREY_600, false),
+pub fn status_style(theme: &Theme, status: Status, unseen: bool, lit: bool) -> Style {
+    let quiet = theme.COLOR_GREY_600;
+    let color = match status {
+        Status::Working if lit => theme.COLOR_GREY_500,
+        Status::NeedsInput => theme.COLOR_ORANGE,
+        Status::Done if unseen => theme.COLOR_GREEN,
+        Status::Error if unseen => theme.COLOR_RED,
+        Status::Idle | Status::Working | Status::Done | Status::Error | Status::Exited => quiet,
     };
-    Style::default().fg(if pulses && !lit { theme.COLOR_GREY_600 } else { color })
+    Style::default().fg(color)
 }
 
 /// The `_` a text field is waiting behind, on the lit half of the pulse and the
@@ -169,7 +171,7 @@ pub fn agent_lines<'a>(registry: &Registry, theme: &Theme, spinner: char, lit: b
             let body = if agent.has_exited() { theme.COLOR_GREY_600 } else { theme.COLOR_GREY_300 };
 
             let mut spans = vec![
-                Span::styled(format!("{mark} "), status_style(theme, agent.status, lit || index == focused)),
+                Span::styled(format!("{mark} "), status_style(theme, agent.status, agent.unseen, lit || index == focused)),
                 Span::styled(key, Style::default().fg(theme.COLOR_GREY_600)),
                 Span::styled(format!("{:<name_width$}", truncate(&agent.name, name_width)), Style::default().fg(body)),
             ];

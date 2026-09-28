@@ -99,11 +99,13 @@ rewritten at once, so the next one is already right.
 
 ## Statuses use the palette
 
-[[Status]] colours are palette entries — `COLOR_RED`, `COLOR_ORANGE`,
-`COLOR_BLUE`, `COLOR_GREEN`, `COLOR_GREY_600` — rather than colours of
-atrium's own, so the two tools can never disagree about what red is. tmuxbar
-reads those same five out of `theme.json`, which is how a window name and a
-sidebar row end up the same colour.
+[[Status]] colours are palette entries — `COLOR_ORANGE`, `COLOR_GREEN`,
+`COLOR_RED`, and `COLOR_GREY_600` and `COLOR_GREY_500` for the greys — rather
+than colours of atrium's own, so the two tools can never disagree about what red
+is. tmuxbar reads the same orange, green and red out of `theme.json`, which is
+how a window name and a sidebar row end up the same colour. Its greys are the
+tmuxbar theme's own, so a window with nothing to say keeps looking like the
+rest of the list.
 
 atrium's own accent is `COLOR_PINK` for the `atriuɱ` on the title line, and
 `COLOR_PURPLE` for the wordmark in [[Settings]] and on the [[Splash]].

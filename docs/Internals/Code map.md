@@ -6,8 +6,8 @@ src/
   lib.rs               The module tree
 
   core/
-    agent.rs           One held agent: identity, status, git context
-    pty.rs             The pty, the parsed screen, the child, and killing it
+    agent.rs           One held agent: identity, status and what orders it, git context
+    pty.rs             The pty, the parsed screen and its title, the child, and killing it
     registry.rs        The held set, the focus, routing reports by id
     git.rs             Branch and dirty flag for a row
     projects.rs        Finding git repositories under the projects root
@@ -17,19 +17,20 @@ src/
     installed.rs       Which of the CLIs atrium knows are on this machine
     layout_config.rs   The sidebar width, in layout.json
     worktree.rs        Cutting one, listing them, and noticing a new one
-    tmux.rs            The two pane options, when atrium is drawing in a pane
+    tmux.rs            The pane options, when atrium is drawing in a pane
     notify.rs          $WORKTREE_HOOK: a worktree appeared, said once
 
   adapters/            Per-CLI launch and status wiring
-    claude.rs          --settings hooks, in exec form
-    copilot.rs         --plugin-dir hooks, in a generated plugin
-    opencode.rs        Tagged only
-    codex.rs           Tagged only
+    claude.rs          --settings hooks, in exec form, and its session file
+    copilot.rs         --plugin-dir hooks, in a generated plugin, and its keys
+    opencode.rs        A plugin handed over through OPENCODE_CONFIG_CONTENT
+    opencode_plugin.js The plugin itself
+    codex.rs           -c hooks, and its window title
 
   ipc/
     server.rs          The unix socket agents report back through
     hook.rs            The other end: `atrium hook <Event>`
-    wire.rs            One tab-separated line
+    wire.rs            One tab-separated line, stamped
 
   app/
     app.rs             The run loop, input dispatch, and what owns the keyboard

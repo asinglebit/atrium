@@ -6,7 +6,8 @@ use std::{
 use portable_pty::CommandBuilder;
 
 use crate::{
-    adapters::{AgentKind, StatusSource, Wiring, tag},
+    adapters::{AgentKind, KeyMeaning, StatusSource, Wiring, tag},
+    core::agent::Status,
     helpers::{json, shell, version::VERSION},
 };
 
@@ -17,22 +18,48 @@ const PLUGIN_NAME: &str = "atrium";
 /// The directory atrium writes the plugin into, under its own config directory.
 const PLUGIN_DIR: &str = "copilot-plugin";
 
-/// copilot's own name for each event, and the word atrium already understands
-/// for it. The wire vocabulary is spelled the way claude spells it, and
-/// `Status::after` is the one table that reads it -- so the translation happens
-/// here, on the way out, rather than as a second vocabulary in `core`.
+/// One hook atrium registers with copilot: the event copilot fires, what it is
+/// narrowed to, and the word atrium already understands for it. The wire
+/// vocabulary is spelled the way claude spells it, and `Status::after` is the
+/// one table that reads it -- so the translation happens here, on the way out,
+/// rather than as a second vocabulary in `core`.
+pub struct Hook {
+    pub event: &'static str,
+    /// A regex copilot tries against the event's own discriminator: the
+    /// notification's type, the tool's name. Anchored, so a name that merely
+    /// contains one of these is not taken for it.
+    pub matcher: Option<&'static str>,
+    pub word: &'static str,
+}
+
+/// The notifications that mean you: a permission prompt, or copilot asking for
+/// more. The rest say a background shell or agent finished, which is nothing
+/// to answer.
+const NEEDS_YOU: &str = "^(permission_prompt|elicitation_dialog)$";
+
+/// copilot's own tool for asking you a question.
+const ASKS_YOU: &str = "^ask_user$";
+
+/// What in an `errorOccurred` payload says the turn is over. copilot reports
+/// the errors it gets past too, and a turn that recovered has not failed.
+const UNRECOVERABLE: &str = r#""recoverable"[[:space:]]*:[[:space:]]*false"#;
+
+/// Every hook, in the order copilot is handed them. `preToolUse` is there
+/// twice: once for the question, and once for any tool at all, which is what
+/// tells a turn still going from one Esc stopped.
 ///
-/// `notification` is the important one: it is what copilot raises for a
-/// permission prompt or a question of its own, which is atrium's "needs you".
-pub const HOOK_EVENTS: [(&str, &str); 8] = [
-    ("sessionStart", "SessionStart"),
-    ("userPromptSubmitted", "UserPromptSubmit"),
-    ("notification", "Notification"),
-    ("postToolUse", "PostToolUse"),
-    ("postToolUseFailure", "PostToolUse"),
-    ("agentStop", "Stop"),
-    ("errorOccurred", "StopFailure"),
-    ("sessionEnd", "SessionEnd"),
+/// `sessionEnd` is not here. It fires on `/clear` as well as on the way out,
+/// and only the child going away means an agent has exited.
+pub const HOOKS: [Hook; 9] = [
+    Hook { event: "sessionStart", matcher: None, word: "SessionStart" },
+    Hook { event: "userPromptSubmitted", matcher: None, word: "UserPromptSubmit" },
+    Hook { event: "notification", matcher: Some(NEEDS_YOU), word: "Notification" },
+    Hook { event: "preToolUse", matcher: Some(ASKS_YOU), word: "PermissionRequest" },
+    Hook { event: "preToolUse", matcher: None, word: "PreToolUse" },
+    Hook { event: "postToolUse", matcher: None, word: "PostToolUse" },
+    Hook { event: "postToolUseFailure", matcher: None, word: "PostToolUse" },
+    Hook { event: "agentStop", matcher: None, word: "Stop" },
+    Hook { event: "errorOccurred", matcher: None, word: "StopFailure" },
 ];
 
 /// How long copilot waits for one of these before giving up on it. The handler
@@ -69,6 +96,21 @@ impl AgentKind for Copilot {
     fn status_source(&self) -> StatusSource {
         StatusSource::Hooks
     }
+
+    /// copilot fires nothing when a prompt is answered or a turn stopped, so
+    /// the key is the only word of it: Esc or Ctrl-C stops a turn, Esc declines
+    /// a prompt, and Enter or a digit answers one. Matched on the bytes as
+    /// sent, so Alt+1 -- `ESC 1` -- is neither.
+    ///
+    /// Choosing "no" with Enter or a digit is the one this gets wrong: it reads
+    /// as answered until the next prompt.
+    fn key_meaning(&self, status: Status, bytes: &[u8]) -> Option<KeyMeaning> {
+        match (status, bytes) {
+            (Status::Working, [0x1b] | [0x03]) | (Status::NeedsInput, [0x1b]) => Some(KeyMeaning::Stop),
+            (Status::NeedsInput, [b'\r'] | [b'1'..=b'9']) => Some(KeyMeaning::Answer),
+            _ => None,
+        }
+    }
 }
 
 /// The manifest. `hooks` names the file beside it, which is the only component
@@ -79,7 +121,8 @@ pub fn plugin_json() -> String {
     )
 }
 
-/// One hook per event, all pointing back at `atrium hook <event>`.
+/// Every hook, grouped under the event copilot fires, all pointing back at
+/// `atrium hook <word>`.
 ///
 /// copilot's `command` is a **shell string**, not an argument list, so the path
 /// is quoted on the way in -- see `helpers::shell`. Only `bash`: the status
@@ -87,14 +130,30 @@ pub fn plugin_json() -> String {
 /// for.
 pub fn hooks_json(exe: &str) -> String {
     let command = shell::quote(exe);
-    let entries: Vec<String> = HOOK_EVENTS
+    let mut events: Vec<&str> = Vec::new();
+    for hook in &HOOKS {
+        if !events.contains(&hook.event) {
+            events.push(hook.event);
+        }
+    }
+    let entries: Vec<String> = events
         .iter()
-        .map(|(event, atrium_event)| {
-            let bash = json::escape(&format!("{command} hook {atrium_event}"));
-            format!("    \"{event}\": [{{ \"type\": \"command\", \"bash\": \"{bash}\", \"timeoutSec\": {TIMEOUT_SECONDS} }}]")
+        .map(|event| {
+            let handlers: Vec<String> = HOOKS.iter().filter(|hook| hook.event == *event).map(|hook| handler(&command, hook)).collect();
+            format!("    \"{event}\": [{}]", handlers.join(", "))
         })
         .collect();
     format!("{{\n  \"version\": 1,\n  \"hooks\": {{\n{}\n  }}\n}}\n", entries.join(",\n"))
+}
+
+/// One entry. `errorOccurred`'s payload is read here, by the shell, so that
+/// `atrium hook` still never reads one: without `-q` grep drains stdin, and the
+/// entry exits 0 whether or not anything was reported.
+fn handler(command: &str, hook: &Hook) -> String {
+    let run = format!("{command} hook {}", hook.word);
+    let bash = if hook.event == "errorOccurred" { format!("if grep -E '{UNRECOVERABLE}' >/dev/null; then {run}; fi; exit 0") } else { run };
+    let matcher = hook.matcher.map(|matcher| format!(", \"matcher\": \"{}\"", json::escape(matcher))).unwrap_or_default();
+    format!("{{ \"type\": \"command\", \"bash\": \"{}\", \"timeoutSec\": {TIMEOUT_SECONDS}{matcher} }}", json::escape(&bash))
 }
 
 /// Where the plugin is kept: with atrium's own files, beside the opencode tui

@@ -10,8 +10,42 @@ use tui_term::vt100;
 /// Lines of history kept above the visible screen, per agent.
 const SCROLLBACK: usize = 10_000;
 
+/// What the child last called its window. Kept as the output is parsed,
+/// because a CLI can say in its title what it says nowhere else.
+#[derive(Default)]
+pub struct TitleWatch {
+    title: Option<String>,
+    /// Set by a new title and cleared by reading it, so a title that has not
+    /// changed costs the draw loop nothing.
+    fresh: bool,
+}
+
+impl TitleWatch {
+    fn set(&mut self, title: &[u8]) {
+        self.title = Some(String::from_utf8_lossy(title).into_owned());
+        self.fresh = true;
+    }
+}
+
+impl vt100::Callbacks for TitleWatch {
+    fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
+        self.set(title);
+    }
+
+    /// vt100 only takes a title in two parts, so one with a `;` in it arrives
+    /// here, split on it.
+    fn unhandled_osc(&mut self, _: &mut vt100::Screen, params: &[&[u8]]) {
+        if let [kind, rest @ ..] = params
+            && matches!(*kind, b"0" | b"2")
+            && !rest.is_empty()
+        {
+            self.set(&rest.join(&b';'));
+        }
+    }
+}
+
 /// The parser is shared: a reader thread writes to it, the draw loop reads it.
-pub type SharedParser = Arc<Mutex<vt100::Parser>>;
+pub type SharedParser = Arc<Mutex<vt100::Parser<TitleWatch>>>;
 
 /// One agent CLI running on its own pty, with a parsed screen to render.
 pub struct PtySession {
@@ -46,7 +80,7 @@ impl PtySession {
         let mut reader = master.try_clone_reader().map_err(io_err)?;
         let writer = master.take_writer().map_err(io_err)?;
 
-        let parser: SharedParser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, SCROLLBACK)));
+        let parser: SharedParser = Arc::new(Mutex::new(vt100::Parser::new_with_callbacks(rows, cols, SCROLLBACK, TitleWatch::default())));
         let sink = Arc::clone(&parser);
         thread::spawn(move || {
             let mut buf = [0u8; 8192];
@@ -67,6 +101,17 @@ impl PtySession {
 
     pub fn parser(&self) -> &SharedParser {
         &self.parser
+    }
+
+    /// The window title, once each time it changes.
+    pub fn take_title(&self) -> Option<String> {
+        let mut parser = self.parser.lock().ok()?;
+        let watch = parser.callbacks_mut();
+        if !watch.fresh {
+            return None;
+        }
+        watch.fresh = false;
+        watch.title.clone()
     }
 
     /// Whether the child asked the terminal for the mouse. One that never did

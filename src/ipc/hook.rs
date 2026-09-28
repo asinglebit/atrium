@@ -1,11 +1,15 @@
 use std::{env, io, io::Write, os::unix::net::UnixStream};
 
-use crate::ipc::wire::Report;
+use crate::ipc::wire::{self, Report};
 
 /// The `atrium hook <Event>` side: say which agent did what, then get out of
 /// the way. Never fails loudly -- a hook that errors is a hook that interrupts
 /// the agent, and a missed status update is not worth that.
 pub fn run(event: &str) -> io::Result<()> {
+    // Before anything else, so the stamp says when the CLI fired the hook
+    // rather than how long this process took to get going.
+    let at = wire::now_ms();
+
     // Claude writes its payload to stdin. atrium does not need it, since the
     // event arrives as an argument, but draining it avoids an EPIPE upstream.
     let _ = io::copy(&mut io::stdin().lock(), &mut io::sink());
@@ -19,7 +23,7 @@ pub fn run(event: &str) -> io::Result<()> {
     };
 
     if let Ok(mut stream) = UnixStream::connect(socket) {
-        let _ = stream.write_all(Report { agent_id, event: event.to_owned() }.encode().as_bytes());
+        let _ = stream.write_all(Report { agent_id, event: event.to_owned(), at: Some(at) }.encode().as_bytes());
     }
     Ok(())
 }

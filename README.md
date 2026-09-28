@@ -159,8 +159,9 @@ Given a pane to draw in, atrium writes what it needs onto it:
 
 | Option | Value |
 | --- | --- |
-| `@atrium_status` | `idle`, `working`, `needs-input` or `error` — the worst of what the held agents are doing |
+| `@atrium_status` | `idle`, `working`, `needs-input`, `done` or `error` — the worst of what the held agents are doing |
 | `@atrium_agents` | `<held> <working> <needs> <error>` |
+| `@atrium_unseen` | `done` or `error` — a turn ended while nobody was looking at the window |
 
 `needs-input` is hyphenated rather than spelled the way the status line spells
 it, because the value is matched against inside a tmux format string and "needs
@@ -168,24 +169,40 @@ you" would not survive the split. `Exited` is not published at all: a row that
 has finished is not something to be pulled back to, and an atrium holding
 nothing but dead agents needs nothing.
 
-It is written only when it changes — saying it every frame would be a process
-every sixteen milliseconds — and cleared when atrium quits. The first frame
-always writes it, which is what makes a fresh atrium clear a value left in that
-pane by one that was killed rather than quit. Killed with `SIGKILL` it cannot
-clear anything, and the stale value stands until something takes the pane.
+The status is written only when it changes — saying it every frame would be a
+process every sixteen milliseconds — and cleared when atrium quits. The first
+frame always writes it, which is what makes a fresh atrium clear a value left in
+that pane by one that was killed rather than quit. Killed with `SIGKILL` it
+cannot clear anything, and the stale value stands until something takes the
+pane.
+
+`@atrium_unseen` is different: it is written once, at the moment a turn ends,
+and only if no client is viewing the window right then. Visiting the window is
+what takes it away again -- tmuxbar hooks window and session changes to clear
+it -- and atrium never re-writes it, so a visit has the last word until the next
+turn ends.
 
 Nothing reads these but whatever you point at them. [tmuxbar][] colours each
-window by the worst thing the atriums in it need, which is a format string over
-the window's own panes rather than anything that polls. It paints them the way
-the sidebar does — blue and pulsing for an agent waiting on you, orange and
-pulsing while it works, steady green when it is done, steady red when it failed
-— reading the same `theme.json`, so a window name and the row it stands for are
-never two different colours.
+window from them, with format strings over the window's own panes rather than
+anything that polls:
 
-The pulse is the third option, `@atrium_blink`, and the only one said on a timer.
-tmux repaints its status line only when asked and ghostty ignores the terminal's
-own blink attribute, so a window cannot blink by itself; atrium keeps the beat
-while it holds an agent that is working or waiting, and stops when it does not.
+| The window holds | It is drawn |
+| --- | --- |
+| an agent waiting on you | orange |
+| a turn that failed, not yet visited | red |
+| a turn that finished, not yet visited | green |
+| an agent working | its usual grey, flickering a shade lighter |
+| anything else | its usual grey |
+
+The sidebar paints its rows by the same rule, with "visited" meaning the agent
+has been on the stage, and both read the same `theme.json` -- so a window name
+and the row it stands for are never two different colours.
+
+The flicker is the fourth option, `@atrium_blink`, and the only one said on a
+timer. tmux repaints its status line only when asked and ghostty ignores the
+terminal's own blink attribute, so a window cannot flicker by itself; atrium
+keeps the beat while it holds an agent that is working, and stops when it does
+not.
 
 [tmuxbar]: https://github.com/asinglebit/tmux
 
@@ -250,7 +267,7 @@ Projects come from `$ATRIUM_PROJECTS`, else `~/projects`.
 | `src/app/draw/splash.rs` | What atrium shows while it holds nothing: the wordmark, and what it could hold |
 | `src/helpers/logo.rs` | The wordmark, and which size a width gets |
 | `src/core/layout_config.rs` | The one thing atrium writes back: the sidebar's width, in `layout.json` |
-| `src/adapters/` | Per-CLI launch, status and theme wiring — `claude`, `copilot`, `opencode`, and a stub for `codex` |
+| `src/adapters/` | Per-CLI launch, status and theme wiring — `claude`, `copilot`, `opencode` and `codex` |
 | `src/ipc/server.rs` | The unix socket agents report back through |
 | `src/ipc/hook.rs` | The other end: `atrium hook <Event>` |
 | `src/app/draw/` | The sidebar, the stage, the settings view, the menu and the modals |
@@ -471,20 +488,42 @@ outside atrium is completely unaffected and the global config is never written.
 The agent also carries `ATRIUM_AGENT_ID` and `ATRIUM_SOCK` in its environment,
 which is how `atrium hook` knows who it is and where to report.
 
-**One bell rings for eleven things, so one event is narrowed.** `Notification`
+**One bell rings for eleven things, so two events are narrowed.** `Notification`
 is the only claude event that means several unrelated things: a permission
 prompt and a question of its own, but also "you have not typed in a while",
 "the turn is finished", "you signed in", and three about quota. Registered bare
-it turned a row blue the moment a turn ended, and left it pulsing there —
+it turned a row the colour of a question the moment a turn ended —
 indistinguishable from an agent actually blocked on a prompt, which is the one
 thing the colour exists to say. It carries a `matcher` now naming the four that
 mean you, so the discriminating happens **in claude**: `atrium hook` goes on
 taking its event name as an argument and goes on reading no payload at all.
+`SessionStart` is narrowed the same way, to the sources that mean a fresh
+session: it fires after a compaction too, which can come in the middle of a
+turn.
 
-**The row on the stage does not pulse.** The pulse pulls your eye to a row you
-are not looking at, and that is the one row you are. It keeps its colour and its
-status, so the tmuxbar segment stays honest and glancing at an agent without
-answering it does not lose the reminder — only the flashing stops.
+**claude's session file says what no hook does.** Nothing fires when you
+approve a prompt, decline one, or interrupt a turn — so a row stayed orange
+until an approved build *finished*, and an interrupted one went on working until
+the next prompt. claude keeps `<config dir>/sessions/<pid>.json` for itself and
+rewrites it on every change, `busy`, `waiting` or `idle`; atrium reads it when
+its mtime moves, and from the first good read it is what says what the agent is
+doing. The hooks go on saying how turns begin and end. The file is undocumented,
+so a claude that stops writing it falls back to the hooks it always had.
+
+**`SessionEnd` is not an exit.** claude fires it on `/clear` and on resume,
+copilot on `/clear`, and a row taken for exited stops getting keys — so
+clearing an agent's context used to leave it deaf. It is not registered any
+more; only the child going away means an agent has exited.
+
+**Hooks are put back in the order they happened.** Each is its own process, and
+they connect whenever they get round to it: a fast turn's `Stop` can land before
+the `UserPromptSubmit` that started it. `atrium hook` stamps a report before it
+does anything else, and one older than the last applied is dropped.
+
+**The row on the stage does not flicker.** The flicker pulls your eye to a row
+you are not looking at, and that is the one row you are. It keeps its status,
+and a question stays orange whether or not you are looking at it — glancing at
+an agent without answering it does not lose the reminder.
 
 **The hook handler is registered in exec form, and that is a correctness fix,
 not a preference.** Claude's `command` field is a shell string. Written that
@@ -497,7 +536,7 @@ space and a quote.
 **The event name is an argument, so the handler never parses JSON.** Hooks are
 registered one per event, which means `atrium hook Stop` already knows what
 happened and can ignore the payload on stdin entirely. That is the whole reason
-this crate has no JSON parser. It still drains stdin, to avoid an EPIPE in the
+the handler needs no JSON parser. It still drains stdin, to avoid an EPIPE in the
 agent that wrote it.
 
 **A hook that fails is a hook that interrupts the agent.** `atrium hook` never
@@ -506,14 +545,31 @@ nothing. A missed status update is not worth disturbing a conversation over.
 
 **copilot reports too, through a plugin atrium generates and hands over as
 `--plugin-dir`** — the same trade as claude's `--settings`, so a copilot started
-outside atrium is untouched. Its `notification` event is what it raises for a
-permission prompt or a question of its own, which is the "needs you" the sidebar
-exists to show; `agentStop`, `errorOccurred` and the rest fill in the others.
-copilot spells its events differently, so the adapter translates them into the
-words atrium already understands rather than teaching the core a second
-vocabulary. Its hook command is a **shell string** with no exec form to fall
-back on, so the path is single-quoted and any quote in it is closed, escaped and
-reopened — the hazard claude's `args` made impossible, met head on instead.
+outside atrium is untouched. Its `notification` event, narrowed to a permission
+prompt or a request for more, and its `ask_user` tool are the "needs you" the
+sidebar exists to show; `agentStop`, an `errorOccurred` it cannot get past, and
+the rest fill in the others. copilot spells its events differently, so the
+adapter translates them into the words atrium already understands rather than
+teaching the core a second vocabulary. Its hook command is a **shell string**
+with no exec form to fall back on, so the path is single-quoted and any quote in
+it is closed, escaped and reopened — the hazard claude's `args` made impossible,
+met head on instead. copilot fires nothing when a prompt is answered or a turn
+stopped, so the keys you send it are read instead: Esc or Ctrl-C stops a turn,
+Enter or a digit answers.
+
+**opencode reports through a plugin, handed over as `OPENCODE_CONFIG_CONTENT`.**
+opencode merges that variable over your own configuration, so naming one plugin
+in it adds that plugin and changes nothing else. The plugin listens to
+opencode's own events — busy and idle, asks and questions and their answers,
+errors and aborts — and writes atrium's lines down one connection, which keeps
+them in order.
+
+**codex reports through `-c`, and through its window title.** `-c` sets a config
+key for one process, so its three hooks never touch `~/.codex/config.toml`.
+What happens between a turn beginning and ending is in the title codex keeps
+once it is asked to: `Action Required` while anything waits on you, `Working`
+while it works, `Ready` when it is done. codex asks once whether to trust hooks
+it has not seen.
 
 **Every agent is resized, not just the focused one.** A background agent whose
 pty still thinks it is the old size renders wrong for a frame when you switch to
@@ -556,8 +612,8 @@ two functions changed. `theme_path()` reads atrium's own `theme.json` if there
 is one and **guitar's otherwise**, so retheme guitar and atrium follows with
 nothing to configure. `save_theme()` always writes atrium's own path — picking a
 theme in atrium's settings must not retheme guitar behind its back, which is
-exactly what the unmodified function would have done. Statuses map onto that palette (`COLOR_RED`, `COLOR_ORANGE`,
-`COLOR_BLUE`, `COLOR_GREEN`) rather than carrying colours of their own, so the
+exactly what the unmodified function would have done. Statuses map onto that palette (`COLOR_ORANGE`, `COLOR_GREEN`,
+`COLOR_RED` and the greys) rather than carrying colours of their own, so the
 two tools can never disagree about what red is.
 
 **A pane carries no title, because the title costs the top row.** The sidebar

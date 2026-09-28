@@ -1,26 +1,38 @@
 use std::path::{Path, PathBuf};
 
+use facet::Facet;
 use portable_pty::CommandBuilder;
 use ratatui::style::Color;
 
 use crate::{
-    adapters::{AgentKind, StatusSource, Wiring, tag},
+    adapters::{Activity, AgentKind, Reading, StatusSource, Wiring, tag},
     helpers::{json, palette::Theme},
 };
 
-/// The hook events atrium registers, and the status each one means. Registering
-/// per event is what lets the handler take the event name as an argument
-/// instead of parsing Claude's payload.
-pub const HOOK_EVENTS: [&str; 9] = ["SessionStart", "UserPromptSubmit", "Notification", "PermissionRequest", "PostToolUse", "PermissionDenied", "Stop", "StopFailure", "SessionEnd"];
+/// The hook events atrium registers. Registering per event is what lets the
+/// handler take the event name as an argument instead of parsing Claude's
+/// payload.
+///
+/// Three of them say how a turn began or ended -- `SessionStart`, `Stop`,
+/// `StopFailure` -- and those are always believed. The rest say what happens
+/// in between, which claude's session file says better once it has been read:
+/// it knows when an approval goes through and when a turn is interrupted, and
+/// no hook fires for either. They stay registered for a claude that stops
+/// writing the file.
+///
+/// `SessionEnd` is not here. It fires on `/clear` and on resume as well as on
+/// the way out, and only the child going away means an agent has exited.
+pub const HOOK_EVENTS: [&str; 11] =
+    ["SessionStart", "UserPromptSubmit", "PermissionRequest", "Elicitation", "ElicitationResult", "Notification", "PostToolUse", "PostToolUseFailure", "PermissionDenied", "Stop", "StopFailure"];
 
 /// Which `Notification`s are worth pulling you over for.
 ///
 /// Claude rings one bell for eleven different things: a permission prompt and a
 /// question of its own, but also "you have not typed in a while", "the turn is
 /// finished", "you signed in", and three about quota. Registered bare, all
-/// eleven read as "needs you" -- so a row turned blue the moment a turn ended
-/// and pulsed there until it was answered, which is the one state the colour
-/// was supposed to distinguish itself from.
+/// eleven read as "needs you" -- so a row took the colour of a question the
+/// moment a turn ended, and kept it until it was answered, which is the one
+/// state that colour was supposed to distinguish itself from.
 ///
 /// The matcher tells them apart **in claude**, so the handler still takes its
 /// event name as an argument and still reads no payload. Letters, `_` and `|`
@@ -28,10 +40,18 @@ pub const HOOK_EVENTS: [&str; 9] = ["SessionStart", "UserPromptSubmit", "Notific
 /// that merely contains one.
 const NEEDS_YOU: &str = "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input";
 
-/// What an event is narrowed to, for the one event where being told everything
-/// is worse than being told some of it.
-fn matcher_for(event: &str) -> Option<&'static str> {
-    (event == "Notification").then_some(NEEDS_YOU)
+/// Which `SessionStart`s mean a fresh session. `compact` is the one left out: it
+/// fires after a compaction, which can happen in the middle of a turn.
+const FRESH: &str = "startup|resume|clear|fork";
+
+/// What an event is narrowed to, for the events where being told everything is
+/// worse than being told some of it.
+pub fn matcher_for(event: &str) -> Option<&'static str> {
+    match event {
+        "Notification" => Some(NEEDS_YOU),
+        "SessionStart" => Some(FRESH),
+        _ => None,
+    }
 }
 
 /// What atrium's theme is filed under. Claude reads a user theme from
@@ -40,6 +60,27 @@ const THEME_SLUG: &str = "atrium";
 
 /// Where a claude with no `CLAUDE_CONFIG_DIR` of its own keeps everything.
 const DEFAULT_CONFIG_DIR: &str = ".claude";
+
+/// Where claude keeps each running session's account of itself, as
+/// `<pid>.json`, beside the rest of its configuration.
+const SESSIONS_DIR: &str = "sessions";
+
+/// The one `waitingFor` that is not claude waiting on you: a menu of your own,
+/// `/model` or `/config`, open between turns or in the middle of one.
+const OWN_MENU: &str = "dialog open";
+
+/// The part of claude's session file that says what it is doing. It rewrites
+/// the file on every change, and says `busy`, `waiting` or `idle`. Undocumented,
+/// so anything else in it is left unread.
+#[derive(Facet)]
+#[facet(rename_all = "camelCase")]
+struct SessionFile {
+    pid: u32,
+    status: String,
+    #[facet(default)]
+    waiting_for: Option<String>,
+    status_updated_at: u64,
+}
 
 pub struct ClaudeCode;
 
@@ -68,11 +109,43 @@ impl AgentKind for ClaudeCode {
     fn status_source(&self) -> StatusSource {
         StatusSource::Hooks
     }
+
+    fn activity_file(&self, config_dir: Option<&str>, pid: u32) -> Option<PathBuf> {
+        Some(session_path(config_dir, pid))
+    }
+
+    fn read_activity(&self, text: &str, pid: u32) -> Option<Reading> {
+        read_session(text, pid)
+    }
+}
+
+/// Where the claude with this pid, launched against `config_dir`, says what it
+/// is doing.
+pub fn session_path(config_dir: Option<&str>, pid: u32) -> PathBuf {
+    config_base(config_dir).join(SESSIONS_DIR).join(format!("{pid}.json"))
+}
+
+/// One read of a session file. None when it is not this claude's, or not in a
+/// shape atrium knows -- which is also how a half-written one reads.
+pub fn read_session(text: &str, pid: u32) -> Option<Reading> {
+    let file = facet_json::from_str::<SessionFile>(text).ok()?;
+    if file.pid != pid {
+        return None;
+    }
+    let activity = match file.status.as_str() {
+        "busy" => Some(Activity::Busy),
+        "waiting" if file.waiting_for.as_deref() == Some(OWN_MENU) => None,
+        "waiting" => Some(Activity::Waiting),
+        "idle" => Some(Activity::Idle),
+        _ => return None,
+    };
+    Some(Reading { activity, at: file.status_updated_at })
 }
 
 /// One hook per event, all pointing back at `atrium hook <event>`, and the
 /// theme when there is one to name. `Notification` is narrowed to the kinds
-/// that mean you -- see `NEEDS_YOU`.
+/// that mean you, and `SessionStart` to the ones that mean a fresh session --
+/// see `matcher_for`.
 ///
 /// `args` puts this in exec form, which runs the handler directly instead of
 /// through a shell -- so a path containing a space or a quote cannot be
@@ -185,11 +258,15 @@ pub fn theme_json(theme: &Theme) -> String {
 /// that names no directory is a claude using its own default, which is
 /// `~/.claude` -- the same rule claude applies to itself.
 pub fn theme_path(config_dir: Option<&str>) -> PathBuf {
-    let base = match config_dir {
+    config_base(config_dir).join("themes").join(format!("{THEME_SLUG}.json"))
+}
+
+/// The directory a claude launched against `config_dir` keeps everything in.
+fn config_base(config_dir: Option<&str>) -> PathBuf {
+    match config_dir {
         Some(dir) => PathBuf::from(dir),
         None => dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(DEFAULT_CONFIG_DIR),
-    };
-    base.join("themes").join(format!("{THEME_SLUG}.json"))
+    }
 }
 
 /// Writes it, and says where. One file per subscription, because which

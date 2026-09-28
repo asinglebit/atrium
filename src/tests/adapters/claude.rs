@@ -41,16 +41,40 @@ fn the_notifications_that_do_not_mean_you_are_left_out() {
 }
 
 #[test]
-fn nothing_else_is_narrowed() {
-    assert_eq!(settings_json("/usr/bin/atrium", None).matches(r#""matcher""#).count(), 1, "only Notification is told everything and asked for some of it");
+fn only_notification_and_session_start_are_narrowed() {
+    assert_eq!(settings_json("/usr/bin/atrium", None).matches(r#""matcher""#).count(), 2, "the rest are told everything and want all of it");
 }
 
 #[test]
-fn the_matcher_stays_on_claudes_exact_match_path() {
+fn every_matcher_stays_on_claudes_exact_match_path() {
     // Letters, digits, `_` and `|` are compared as exact alternatives. One
     // character outside that set turns the whole thing into an unanchored
     // regex, which would match any type merely containing one of these words.
-    assert!(NEEDS_YOU.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '|'), "{NEEDS_YOU}");
+    for event in HOOK_EVENTS {
+        if let Some(matcher) = matcher_for(event) {
+            assert!(matcher.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '|'), "{event}: {matcher}");
+        }
+    }
+}
+
+#[test]
+fn a_compaction_is_not_a_fresh_session() {
+    // SessionStart fires after a compaction too, which can happen in the middle
+    // of a turn -- read as fresh, the row stopped flickering while it worked.
+    let fresh = matcher_for("SessionStart").expect("SessionStart is narrowed");
+    let sources: Vec<&str> = fresh.split('|').collect();
+    assert!(!sources.contains(&"compact"), "{fresh}");
+    for source in ["startup", "resume", "clear", "fork"] {
+        assert!(sources.contains(&source), "{source} missing from {fresh}");
+    }
+}
+
+#[test]
+fn session_end_is_not_registered() {
+    // It fires on /clear and on resume too, and a row taken for exited stops
+    // getting keys. The child going away is what says an agent has exited.
+    assert!(!HOOK_EVENTS.contains(&"SessionEnd"));
+    assert!(!settings_json("/usr/bin/atrium", None).contains("SessionEnd"));
 }
 
 #[test]
@@ -139,4 +163,35 @@ fn installing_writes_the_theme_where_it_was_asked_to() {
     install_to(&path, &Theme::matrix()).expect("install");
 
     assert_eq!(std::fs::read_to_string(&path).expect("theme"), theme_json(&Theme::matrix()));
+}
+
+#[test]
+fn the_session_file_is_kept_inside_the_subscription() {
+    assert_eq!(session_path(Some("/home/x/.claude-work"), 42), std::path::PathBuf::from("/home/x/.claude-work/sessions/42.json"));
+    assert!(session_path(None, 42).ends_with(".claude/sessions/42.json"));
+}
+
+fn session(pid: u32, status: &str, waiting_for: &str) -> String {
+    format!(r#"{{"pid":{pid},"sessionId":"s","status":"{status}","waitingFor":{waiting_for},"messagingSocketPath":"/run/x.sock","statusUpdatedAt":1790532030147}}"#)
+}
+
+#[test]
+fn the_session_file_says_busy_waiting_or_idle() {
+    assert_eq!(read_session(&session(7, "busy", "null"), 7), Some(Reading { activity: Some(Activity::Busy), at: 1_790_532_030_147 }));
+    assert_eq!(read_session(&session(7, "waiting", r#""permission""#), 7).and_then(|reading| reading.activity), Some(Activity::Waiting));
+    assert_eq!(read_session(&session(7, "idle", "null"), 7).and_then(|reading| reading.activity), Some(Activity::Idle));
+}
+
+#[test]
+fn a_menu_of_your_own_is_no_news() {
+    let reading = read_session(&session(7, "waiting", r#""dialog open""#), 7).expect("still a file claude wrote");
+    assert_eq!(reading.activity, None, "/model open is not claude asking you anything");
+}
+
+#[test]
+fn a_session_file_atrium_cannot_trust_is_not_read_at_all() {
+    assert_eq!(read_session(&session(8, "busy", "null"), 7), None, "another process' file");
+    assert_eq!(read_session(&session(7, "napping", "null"), 7), None, "a status this atrium does not know");
+    assert_eq!(read_session(r#"{"pid":7,"status":"bu"#, 7), None, "half written");
+    assert_eq!(read_session(r#"{"pid":7,"status":"busy"}"#, 7), None, "no stamp to order it by");
 }

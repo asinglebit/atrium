@@ -1,6 +1,7 @@
 use super::*;
 use crate::core::agent::{AgentSpec, Harness, Status};
 use crate::helpers::palette::Theme;
+use crate::ipc::wire;
 
 /// `cat` just sits on its pty, which is all a registry test needs from a child.
 /// Tests never bind a socket; a path that cannot be connected to is exactly
@@ -12,6 +13,20 @@ fn harness() -> Harness {
 fn held(cwd: &str) -> Agent {
     let spec = AgentSpec::new("cat", Vec::new(), cwd);
     Agent::spawn(&spec, &harness(), &Theme::classic(), 24, 80).expect("pty should open")
+}
+
+/// An agent whose child has already gone: exiting is the one thing no hook can
+/// say, so it has to really happen.
+fn gone() -> Agent {
+    let spec = AgentSpec::new("true", Vec::new(), "/tmp");
+    let mut agent = Agent::spawn(&spec, &harness(), &Theme::classic(), 24, 80).expect("pty should open");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !agent.has_exited() && std::time::Instant::now() < deadline {
+        agent.refresh_status(wire::now_ms());
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(agent.has_exited(), "`true` should have exited by now");
+    agent
 }
 
 fn registry_of(n: usize) -> Registry {
@@ -105,7 +120,7 @@ fn resize_reaches_every_agent_not_just_the_focused_one() {
 #[test]
 fn a_live_agent_is_not_reported_as_exited() {
     let mut registry = registry_of(1);
-    registry.refresh();
+    registry.refresh(wire::now_ms());
     assert_eq!(registry.focused().expect("agent").status, Status::Idle);
 }
 
@@ -113,7 +128,7 @@ fn a_live_agent_is_not_reported_as_exited() {
 /// it the same way the hook feed does.
 fn set_status(registry: &mut Registry, index: usize, event: &str) {
     let id = registry.agents()[index].id;
-    registry.apply(&Report { agent_id: id, event: event.to_owned() });
+    registry.apply(&Report { agent_id: id, event: event.to_owned(), at: None }, wire::now_ms());
 }
 
 #[test]
@@ -130,21 +145,58 @@ fn the_worst_status_is_the_one_that_carries() {
     assert_eq!(registry.aggregate(), Some(Status::NeedsInput), "one agent waiting outranks two that are not");
 
     set_status(&mut registry, 0, "StopFailure");
-    assert_eq!(registry.aggregate(), Some(Status::Error), "an error outranks even that");
+    assert_eq!(registry.aggregate(), Some(Status::NeedsInput), "waiting on you outranks even a failure");
+}
+
+#[test]
+fn still_going_outranks_how_a_turn_ended() {
+    // Whether an ending has been seen is @atrium_unseen's to say, so the word
+    // only has to tell a window whether anything is waiting or working.
+    let mut registry = registry_of(3);
+    set_status(&mut registry, 0, "StopFailure");
+    set_status(&mut registry, 1, "Stop");
+    assert_eq!(registry.aggregate(), Some(Status::Error), "a failure is worse than a finish");
+
+    set_status(&mut registry, 2, "UserPromptSubmit");
+    assert_eq!(registry.aggregate(), Some(Status::Working));
+}
+
+#[test]
+fn what_ended_is_collected_once_across_every_agent() {
+    let mut registry = registry_of(2);
+    set_status(&mut registry, 0, "Stop");
+    set_status(&mut registry, 1, "StopFailure");
+
+    assert_eq!(registry.take_ended(), Some(Status::Error), "a failure among the finishes is what is said");
+    assert_eq!(registry.take_ended(), None);
+}
+
+#[test]
+fn the_agent_on_the_stage_has_been_seen() {
+    let mut registry = registry_of(2);
+    set_status(&mut registry, 0, "Stop");
+    set_status(&mut registry, 1, "Stop");
+    registry.focus_at(1);
+
+    registry.see_focused();
+
+    assert!(registry.agents()[0].unseen, "a row you have not put on the stage is still waiting to be looked at");
+    assert!(!registry.agents()[1].unseen);
 }
 
 #[test]
 fn an_atrium_holding_only_dead_agents_needs_nothing() {
-    let mut registry = registry_of(2);
-    set_status(&mut registry, 0, "SessionEnd");
-    set_status(&mut registry, 1, "SessionEnd");
+    let mut registry = Registry::new();
+    registry.push(gone());
+    registry.push(gone());
     assert!(registry.aggregate().is_none(), "a finished row is not something to be pulled back to");
 }
 
 #[test]
 fn a_dead_agent_does_not_drown_out_a_live_one() {
-    let mut registry = registry_of(2);
-    set_status(&mut registry, 0, "SessionEnd");
+    let mut registry = Registry::new();
+    registry.push(gone());
+    registry.push(held("/tmp"));
     set_status(&mut registry, 1, "Notification");
     assert_eq!(registry.aggregate(), Some(Status::NeedsInput));
 }
@@ -166,8 +218,8 @@ fn the_counts_say_how_many_are_in_each_state() {
 
 #[test]
 fn a_dead_agent_is_still_held() {
-    let mut registry = registry_of(1);
-    set_status(&mut registry, 0, "SessionEnd");
+    let mut registry = Registry::new();
+    registry.push(gone());
     assert_eq!(registry.counts().held, 1, "a row is still a row");
 }
 

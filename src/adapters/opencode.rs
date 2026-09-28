@@ -7,8 +7,8 @@ use portable_pty::CommandBuilder;
 use ratatui::style::Color;
 
 use crate::{
-    adapters::{AgentKind, StatusSource, Wiring, tag},
-    helpers::palette::Theme,
+    adapters::{AgentKind, StatusSource, Wiring, tag, write_atomically},
+    helpers::{json, palette::Theme},
 };
 
 /// What the theme atrium writes is called. A name of its own, so nothing
@@ -20,9 +20,20 @@ const THEME_NAME: &str = "atrium";
 /// that file says -- keybinds, scroll speed -- is left alone.
 const TUI_CONFIG_ENV: &str = "OPENCODE_TUI_CONFIG";
 
-/// Held, but it does not report back yet -- it is tagged so that it can once
-/// opencode grows something hook-shaped. What it does take from atrium is the
-/// theme.
+/// The environment variable that hands opencode a config of atrium's own,
+/// merged over yours rather than instead of it. atrium's names one plugin.
+const CONFIG_CONTENT_ENV: &str = "OPENCODE_CONFIG_CONTENT";
+
+/// The plugin, which says what opencode is doing in the same lines
+/// `atrium hook` sends. Kept as a file of its own so it can be read, and run,
+/// as the JavaScript it is.
+pub const PLUGIN: &str = include_str!("opencode_plugin.js");
+
+/// Where atrium keeps the plugin, with its own files.
+const PLUGIN_DIR: &str = "opencode-plugin";
+const PLUGIN_FILE: &str = "atrium.js";
+
+/// Reports through a plugin atrium generates, and wears atrium's theme.
 pub struct OpenCode;
 
 impl AgentKind for OpenCode {
@@ -30,13 +41,22 @@ impl AgentKind for OpenCode {
         "opencode"
     }
 
-    /// A theme that cannot be written is passed over: an opencode wearing its
-    /// own colours is still an opencode, and refusing to launch one over that
-    /// would be the wrong trade.
+    /// A theme or plugin that cannot be written is passed over: an opencode
+    /// wearing its own colours, or one atrium can only watch, is still an
+    /// opencode, and refusing to launch one over that would be the wrong trade.
+    ///
+    /// A config of your own already in `OPENCODE_CONFIG_CONTENT` is left alone:
+    /// replacing it would drop everything it says, so that agent goes unwatched
+    /// instead.
     fn instrument(&self, cmd: &mut CommandBuilder, wiring: &Wiring) {
         tag(cmd, wiring);
         if let Ok(path) = install(&wiring.theme) {
             cmd.env(TUI_CONFIG_ENV, path);
+        }
+        if hands_over_plugin(cmd)
+            && let Ok(plugin) = install_plugin()
+        {
+            cmd.env(CONFIG_CONTENT_ENV, config_content(&plugin));
         }
     }
 
@@ -47,7 +67,7 @@ impl AgentKind for OpenCode {
     }
 
     fn status_source(&self) -> StatusSource {
-        StatusSource::Heuristic
+        StatusSource::Hooks
     }
 }
 
@@ -177,6 +197,40 @@ pub fn tui_config_path() -> PathBuf {
     path.push("atrium");
     path.push("opencode-tui.json");
     path
+}
+
+/// Whether the plugin can be handed over without taking a config of yours away:
+/// only while nothing, inherited or from a profile, has set the variable.
+pub fn hands_over_plugin(cmd: &CommandBuilder) -> bool {
+    cmd.get_env(CONFIG_CONTENT_ENV).is_none()
+}
+
+/// The config that loads the plugin. The path is absolute, which is the only
+/// kind opencode resolves from a config with no file of its own.
+pub fn config_content(plugin: &Path) -> String {
+    format!(r#"{{"plugin":["{}"]}}"#, json::escape(&plugin.to_string_lossy()))
+}
+
+/// Where the plugin is written, beside copilot's.
+pub fn plugin_path() -> PathBuf {
+    let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push("atrium");
+    path.push(PLUGIN_DIR);
+    path.push(PLUGIN_FILE);
+    path
+}
+
+/// Writes the plugin and says where. Rewritten on every spawn, so an atrium
+/// that has been updated hands over its own.
+pub fn install_plugin() -> io::Result<PathBuf> {
+    install_plugin_to(&plugin_path())
+}
+
+/// The writing, with the destination handed in -- so it can be tested without
+/// writing into the plugin the opencodes on this machine would load.
+pub fn install_plugin_to(path: &Path) -> io::Result<PathBuf> {
+    write_atomically(path, PLUGIN)?;
+    Ok(path.to_path_buf())
 }
 
 /// Writes both and hands back the one to point opencode at. Rewritten on every

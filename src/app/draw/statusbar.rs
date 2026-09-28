@@ -14,8 +14,9 @@ pub fn draw(frame: &mut Frame, layout: &Layout, registry: &Registry, theme: &The
     if let Some(agent) = registry.focused() {
         left.push(Span::styled(format!("{} ", agent.name), Style::default().fg(theme.COLOR_TEXT)));
         // Never pulsed, for the reason `status_style` gives: this line is only
-        // ever about the agent on the stage.
-        left.push(Span::styled(agent.status.label(), crate::app::draw::pane::status_style(theme, agent.status, true)));
+        // ever about the agent on the stage. Always in the status' own colour,
+        // seen or not, so a failure you are looking at still reads as one.
+        left.push(Span::styled(agent.status.label(), crate::app::draw::pane::status_style(theme, agent.status, true, true)));
         if let Some(git) = agent.git() {
             let dirty = if git.dirty { "*" } else { "" };
             left.push(Span::styled(format!("  ● {}{dirty}", git.branch), Style::default().fg(theme.COLOR_GRASS)));

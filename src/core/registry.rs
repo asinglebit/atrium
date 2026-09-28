@@ -107,9 +107,9 @@ impl Registry {
 
     /// Reports name an agent by id, so they land correctly even after the rows
     /// have been reordered or dismissed.
-    pub fn apply(&mut self, report: &Report) {
+    pub fn apply(&mut self, report: &Report, now: u64) {
         if let Some(agent) = self.agents.iter_mut().find(|agent| agent.id == report.agent_id) {
-            agent.apply_event(&report.event);
+            agent.apply(report, now);
         }
     }
 
@@ -119,9 +119,23 @@ impl Registry {
         }
     }
 
-    pub fn refresh(&mut self) {
+    pub fn refresh(&mut self, now: u64) {
         for agent in &mut self.agents {
-            agent.refresh_status();
+            agent.refresh_status(now);
+        }
+    }
+
+    /// Whether a turn ended anywhere since the last ask, and how: one failure
+    /// among the finishes is what is said.
+    pub fn take_ended(&mut self) -> Option<Status> {
+        self.agents.iter_mut().filter_map(Agent::take_ended).max_by_key(|status| *status == Status::Error)
+    }
+
+    /// The agent on the stage is being looked at, so whatever it last did has
+    /// been seen.
+    pub fn see_focused(&mut self) {
+        if let Some(agent) = self.focused_mut() {
+            agent.unseen = false;
         }
     }
 
@@ -131,11 +145,16 @@ impl Registry {
     /// `Exited` is left out: a row that has finished is not something to be
     /// pulled back to, and an atrium holding nothing but dead agents needs
     /// nothing.
+    ///
+    /// Waiting on you outranks everything, and still going outranks how a turn
+    /// ended: whether that ending has been seen is told apart elsewhere, by
+    /// `@atrium_unseen`.
     pub fn aggregate(&self) -> Option<Status> {
         self.agents.iter().map(|agent| agent.status).filter(|status| *status != Status::Exited).max_by_key(|status| match status {
-            Status::Error => 4,
-            Status::NeedsInput => 3,
-            Status::Working => 2,
+            Status::NeedsInput => 5,
+            Status::Working => 4,
+            Status::Error => 3,
+            Status::Done => 2,
             Status::Idle => 1,
             Status::Exited => 0,
         })
@@ -150,7 +169,7 @@ impl Registry {
                 Status::Working => counts.working += 1,
                 Status::NeedsInput => counts.needs_input += 1,
                 Status::Error => counts.error += 1,
-                Status::Idle | Status::Exited => {},
+                Status::Idle | Status::Done | Status::Exited => {},
             }
         }
         counts

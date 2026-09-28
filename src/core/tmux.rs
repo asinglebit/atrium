@@ -18,6 +18,11 @@ pub const STATUS_OPTION: &str = "@atrium_status";
 /// How many agents are held and what they are doing, for the bar segment.
 pub const AGENTS_OPTION: &str = "@atrium_agents";
 
+/// How the last turn to end here ended -- `done` or `error` -- while nobody was
+/// looking. Set only at the moment it happens and never again, so the hook that
+/// clears it when a window is visited has the last word until the next one.
+pub const UNSEEN_OPTION: &str = "@atrium_unseen";
+
 /// Which half of the pulse the bar should be drawing. Global rather than set on
 /// the pane, because every window that holds a waiting agent beats together and
 /// a window format resolves an option up the pane, window, session, global
@@ -44,6 +49,7 @@ pub fn word(status: Status) -> &'static str {
         Status::Idle => "idle",
         Status::Working => "working",
         Status::NeedsInput => "needs-input",
+        Status::Done => "done",
         Status::Error => "error",
         Status::Exited => "exited",
     }
@@ -65,6 +71,31 @@ pub fn publish_args(pane: &str, status: Option<Status>, counts: Counts) -> Vec<S
     // Without this the bar would not repaint until status-interval, which is a
     // minute under a default tmuxbar -- long enough to look broken.
     args.extend(["refresh-client".to_owned(), "-S".to_owned()]);
+    args
+}
+
+/// Marks the window as holding a result nobody has seen, unless somebody is
+/// looking at it right now -- a turn that ends in front of you is seen.
+///
+/// Worded as tmux's own `if-shell -F`, so the check and the write are one step
+/// inside tmux rather than a question and an answer across two invocations.
+/// A finish never covers a failure that is already waiting to be seen.
+pub fn unseen_args(pane: &str, ended: Status) -> Vec<String> {
+    let unwatched = "#{==:#{window_active_clients},0}";
+    let (condition, value) = match ended {
+        Status::Error => (unwatched.to_owned(), "error"),
+        _ => (format!("#{{&&:{unwatched},#{{!=:#{{{UNSEEN_OPTION}}},error}}}}"), "done"),
+    };
+    vec!["if-shell".to_owned(), "-F".to_owned(), "-t".to_owned(), pane.to_owned(), condition, format!("set-option -p -t {pane} {UNSEEN_OPTION} {value}")]
+}
+
+/// Everything this atrium has said, unsaid, and the repaint that shows it.
+pub fn clear_args(pane: &str) -> Vec<String> {
+    let mut args = publish_args(pane, None, Counts::default());
+    let repaint = args.split_off(args.len() - 2);
+    args.extend(set_args(pane, UNSEEN_OPTION, None));
+    args.push(";".to_owned());
+    args.extend(repaint);
     args
 }
 
@@ -95,10 +126,31 @@ fn set_args(pane: &str, option: &str, value: Option<&str>) -> Vec<String> {
     args
 }
 
-/// Say what this atrium needs. Never fails loudly -- an atrium that cannot
-/// reach tmux is not a broken atrium.
-pub fn publish(pane: &str, status: Option<Status>, counts: Counts) {
-    run(publish_args(pane, status, counts));
+/// What this atrium needs, what just ended, or both, as one invocation.
+pub fn announce_args(pane: &str, levels: Option<(Option<Status>, Counts)>, ended: Option<Status>) -> Vec<String> {
+    let mut args = match levels {
+        Some((status, counts)) => publish_args(pane, status, counts),
+        None => vec!["refresh-client".to_owned(), "-S".to_owned()],
+    };
+    if let Some(ended) = ended {
+        // Before the repaint, so the repaint shows it.
+        let repaint = args.split_off(args.len() - 2);
+        args.extend(unseen_args(pane, ended));
+        args.push(";".to_owned());
+        args.extend(repaint);
+    }
+    args
+}
+
+/// Say it. Never fails loudly -- an atrium that cannot reach tmux is not a
+/// broken atrium.
+pub fn publish(pane: &str, levels: Option<(Option<Status>, Counts)>, ended: Option<Status>) {
+    run(announce_args(pane, levels, ended));
+}
+
+/// Unsay everything, on the way out.
+pub fn clear(pane: &str) {
+    run(clear_args(pane));
 }
 
 /// Hand the bar the half of the beat it should be drawing.

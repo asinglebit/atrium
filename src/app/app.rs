@@ -42,7 +42,7 @@ use crate::{
         palette::{self, THEME_PRESETS, Theme},
         scroll, spinner,
     },
-    ipc::server::StatusServer,
+    ipc::{server::StatusServer, wire},
 };
 
 /// How often the branch and dirty flag are re-read. Slow enough that git status
@@ -196,11 +196,13 @@ impl App {
             let stage = self.layout_for(Rect::from(terminal.size()?)).stage;
             self.stage = stage;
             self.registry.resize_all(stage.height, stage.width)?;
+            let now = wire::now_ms();
             for report in self.server.drain() {
-                self.registry.apply(&report);
+                self.registry.apply(&report, now);
             }
-            self.registry.refresh();
-            self.announce();
+            self.registry.refresh(now);
+            let ended = self.registry.take_ended();
+            self.announce(ended);
             self.pulse();
             if self.last_git.elapsed() >= GIT_INTERVAL {
                 self.registry.refresh_git();
@@ -225,23 +227,27 @@ impl App {
     }
 
     /// Tell the pane what this atrium needs, and only when that has changed:
-    /// saying it every frame would be a process every sixteen milliseconds.
-    fn announce(&mut self) {
+    /// saying it every frame would be a process every sixteen milliseconds. A
+    /// turn that just ended is said too, even when the worst of what is held has
+    /// not moved -- one agent finishing beside another still working changes
+    /// nothing else.
+    fn announce(&mut self, ended: Option<Status>) {
         let Some(pane) = &self.tmux_pane else {
             return;
         };
         let now = (self.registry.aggregate(), self.registry.counts());
-        if self.published.as_ref() == Some(&now) {
+        let changed = self.published.as_ref() != Some(&now);
+        if !changed && ended.is_none() {
             return;
         }
-        tmux::publish(pane, now.0, now.1);
+        tmux::publish(pane, changed.then_some(now), ended);
         self.published = Some(now);
     }
 
     /// Keep time for the window tmuxbar draws this atrium in, one invocation per
     /// half beat. tmux repaints its status line only when asked, so a window
-    /// cannot pulse unless something asks on a timer -- and only an atrium knows
-    /// there is an agent still waiting to pulse about.
+    /// cannot flicker unless something asks on a timer -- and only an atrium knows
+    /// there is an agent still working.
     ///
     /// The beat comes off the wall clock rather than this process' uptime, so
     /// two atriums on one server light up together instead of fighting over the
@@ -250,9 +256,9 @@ impl App {
         if self.tmux_pane.is_none() {
             return;
         }
-        // Exactly the two statuses tmuxbar draws in a pulsing colour. Anything
-        // else is settled, and a settled window has nothing to repaint for.
-        if !matches!(self.published, Some((Some(Status::Working | Status::NeedsInput), _))) {
+        // Exactly the status tmuxbar draws flickering. Anything else holds one
+        // colour, and a window holding one colour has nothing to repaint for.
+        if !matches!(self.published, Some((Some(Status::Working), _))) {
             self.stop_pulsing();
             return;
         }
@@ -317,6 +323,9 @@ impl App {
                 };
                 draw::settings::draw(frame, layout.stage, layout.app, settings, &context);
             } else {
+                // Whatever the agent on the stage last did is in front of you,
+                // so its row never waits to be noticed.
+                self.registry.see_focused();
                 if let Some(area) = layout.sidebar {
                     self.sidebar_scroll = scroll::trap(self.registry.focus(), self.sidebar_scroll, self.registry.len(), area.height as usize);
                     draw::sidebar::draw(frame, area, &self.registry, &self.theme, spinner, lit, self.sidebar_scroll);
@@ -1012,11 +1021,17 @@ impl App {
         }
     }
 
+    /// A key for the agent. Only here, never in `send_bytes`, does the agent's
+    /// adapter hear what was pressed: a paste or a click is not someone
+    /// answering a prompt.
     fn send(&mut self, key: KeyEvent) -> io::Result<()> {
-        match keys::encode(key) {
-            Some(bytes) => self.send_bytes(&bytes),
-            None => Ok(()),
+        let Some(bytes) = keys::encode(key) else {
+            return Ok(());
+        };
+        if let Some(agent) = self.registry.focused_mut() {
+            agent.on_key(&bytes, wire::now_ms());
         }
+        self.send_bytes(&bytes)
     }
 
     /// Input goes only to the focused agent, and only while it can still read it.
@@ -1046,7 +1061,7 @@ impl Drop for App {
         let Some(pane) = &self.tmux_pane else {
             return;
         };
-        tmux::publish(pane, None, Counts::default());
+        tmux::clear(pane);
         self.stop_pulsing();
     }
 }

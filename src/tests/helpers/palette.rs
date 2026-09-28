@@ -36,25 +36,38 @@ fn a_real_colour_is_left_alone() {
 fn every_status_maps_onto_a_palette_colour() {
     use crate::app::draw::pane::status_style;
     let theme = Theme::classic();
+    let unseen = |status| status_style(&theme, status, true, true).fg;
 
-    assert_eq!(status_style(&theme, Status::Error, true).fg, Some(theme.COLOR_RED));
-    assert_eq!(status_style(&theme, Status::NeedsInput, true).fg, Some(theme.COLOR_BLUE));
-    assert_eq!(status_style(&theme, Status::Working, true).fg, Some(theme.COLOR_ORANGE));
-    assert_eq!(status_style(&theme, Status::Idle, true).fg, Some(theme.COLOR_GREEN));
-    assert_eq!(status_style(&theme, Status::Exited, true).fg, Some(theme.COLOR_GREY_600));
+    assert_eq!(unseen(Status::NeedsInput), Some(theme.COLOR_ORANGE), "waiting on you is the window's orange");
+    assert_eq!(unseen(Status::Done), Some(theme.COLOR_GREEN));
+    assert_eq!(unseen(Status::Error), Some(theme.COLOR_RED));
+    assert_eq!(unseen(Status::Working), Some(theme.COLOR_GREY_500), "working is a grey, a shade lighter on the lit half");
+    assert_eq!(unseen(Status::Idle), Some(theme.COLOR_GREY_600));
+    assert_eq!(unseen(Status::Exited), Some(theme.COLOR_GREY_600));
 }
 
 #[test]
-fn only_a_status_still_waiting_pulses() {
+fn a_result_once_seen_goes_back_to_grey() {
     use crate::app::draw::pane::status_style;
     let theme = Theme::classic();
-    let dark = |status| status_style(&theme, status, false).fg;
 
-    assert_eq!(dark(Status::NeedsInput), Some(theme.COLOR_GREY_600), "an agent waiting on you has to be noticed");
-    assert_eq!(dark(Status::Working), Some(theme.COLOR_GREY_600));
-    assert_eq!(dark(Status::Idle), Some(theme.COLOR_GREEN), "a finished agent is settled");
+    for status in [Status::Done, Status::Error] {
+        assert_eq!(status_style(&theme, status, false, true).fg, Some(theme.COLOR_GREY_600), "{status:?} has been looked at");
+    }
+    assert_eq!(status_style(&theme, Status::NeedsInput, false, true).fg, Some(theme.COLOR_ORANGE), "a question is still a question once you have seen it");
+}
+
+#[test]
+fn only_working_moves_with_the_beat() {
+    use crate::app::draw::pane::status_style;
+    let theme = Theme::classic();
+    let dark = |status| status_style(&theme, status, true, false).fg;
+
+    assert_eq!(dark(Status::Working), Some(theme.COLOR_GREY_600), "the dark half is the grey everything quiet wears");
+    assert_eq!(dark(Status::NeedsInput), Some(theme.COLOR_ORANGE), "orange holds still");
+    assert_eq!(dark(Status::Done), Some(theme.COLOR_GREEN));
     assert_eq!(dark(Status::Error), Some(theme.COLOR_RED));
-    assert_eq!(dark(Status::Exited), Some(theme.COLOR_GREY_600));
+    assert_eq!(dark(Status::Idle), Some(theme.COLOR_GREY_600));
 }
 
 #[test]
@@ -65,19 +78,19 @@ fn nothing_asks_the_terminal_to_blink() {
     use ratatui::style::Modifier;
     let theme = Theme::classic();
 
-    for status in [Status::Idle, Status::Working, Status::NeedsInput, Status::Error, Status::Exited] {
-        for lit in [true, false] {
-            let modifiers = status_style(&theme, status, lit).add_modifier;
+    for status in [Status::Idle, Status::Working, Status::NeedsInput, Status::Done, Status::Error, Status::Exited] {
+        for (unseen, lit) in [(true, true), (true, false), (false, true), (false, false)] {
+            let modifiers = status_style(&theme, status, unseen, lit).add_modifier;
             assert!(!modifiers.contains(Modifier::SLOW_BLINK) && !modifiers.contains(Modifier::RAPID_BLINK), "{status:?} asks the terminal to blink");
         }
     }
 }
 
 #[test]
-fn distinct_statuses_are_told_apart_by_colour() {
+fn the_statuses_with_something_to_say_are_told_apart_by_colour() {
     use crate::app::draw::pane::status_style;
     let theme = Theme::classic();
-    let colours = [Status::Idle, Status::Working, Status::NeedsInput, Status::Error].map(|status| status_style(&theme, status, true).fg);
+    let colours = [Status::Idle, Status::Working, Status::NeedsInput, Status::Done, Status::Error].map(|status| status_style(&theme, status, true, true).fg);
 
     for (index, colour) in colours.iter().enumerate() {
         assert!(!colours[index + 1..].contains(colour), "two statuses share {colour:?}");

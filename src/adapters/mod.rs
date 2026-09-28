@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use portable_pty::CommandBuilder;
 
-use crate::helpers::palette::Theme;
+use crate::{core::agent::Status, helpers::palette::Theme};
 
 /// Where an agent's status comes from.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -16,6 +16,35 @@ pub enum StatusSource {
     Hooks,
     /// Nothing calls back, so atrium can only watch the process.
     Heuristic,
+}
+
+/// What a CLI's own account of itself says it is doing, for the ones that keep
+/// one somewhere atrium can read: claude's session file, codex's window title.
+/// These are the moments no hook fires for -- an approval going through, an
+/// interrupt -- which is the whole reason to read them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Activity {
+    Busy,
+    Waiting,
+    Idle,
+}
+
+/// One reading of a CLI's own account of itself.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Reading {
+    /// None when what it says is no news -- one of your own menus being open.
+    pub activity: Option<Activity>,
+    /// When it started saying it, in ms since the epoch.
+    pub at: u64,
+}
+
+/// What a key means to a CLI that fires nothing when it is pressed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum KeyMeaning {
+    /// A prompt was answered, so the agent is back at work.
+    Answer,
+    /// The turn is over: interrupted, or a prompt declined.
+    Stop,
 }
 
 /// What atrium hands an agent when it is launched: the way home, and the look.
@@ -47,6 +76,27 @@ pub trait AgentKind {
     fn retheme(&self, _config_dir: Option<&str>, _theme: &Theme) {}
 
     fn status_source(&self) -> StatusSource;
+
+    /// Where this CLI writes down what one of its processes is doing.
+    fn activity_file(&self, _config_dir: Option<&str>, _pid: u32) -> Option<PathBuf> {
+        None
+    }
+
+    /// What that file says. None for anything that cannot be trusted: half
+    /// written, another process', or in a shape this atrium does not know.
+    fn read_activity(&self, _text: &str, _pid: u32) -> Option<Reading> {
+        None
+    }
+
+    /// What a window title says, for a CLI that puts its state there.
+    fn title_activity(&self, _title: &str) -> Option<Activity> {
+        None
+    }
+
+    /// What a key sent to the agent means, as the bytes it was sent as.
+    fn key_meaning(&self, _status: Status, _bytes: &[u8]) -> Option<KeyMeaning> {
+        None
+    }
 }
 
 /// Picks the adapter from the program name, ignoring any directories around it.
@@ -84,6 +134,18 @@ impl AgentKind for Unknown {
 pub fn tag(cmd: &mut CommandBuilder, wiring: &Wiring) {
     cmd.env("ATRIUM_AGENT_ID", wiring.agent_id.to_string());
     cmd.env("ATRIUM_SOCK", &wiring.socket);
+}
+
+/// Writes a generated file whole or not at all, so a CLI starting at the same
+/// moment never reads half of one.
+pub fn write_atomically(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut temp = path.as_os_str().to_owned();
+    temp.push(format!(".{}.tmp", std::process::id()));
+    std::fs::write(&temp, contents)?;
+    std::fs::rename(&temp, path)
 }
 
 #[cfg(test)]

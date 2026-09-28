@@ -168,3 +168,24 @@ fn a_cli_that_asked_for_the_mouse_is() {
 
     assert!(session.wants_mouse(), "the child turned mouse reporting on and should be sent reports");
 }
+
+#[test]
+fn a_title_is_handed_over_once_each_time_it_changes() {
+    let session = PtySession::spawn(CommandBuilder::new("cat"), 8, 40).expect("spawn");
+    assert_eq!(session.take_title(), None, "nothing has named the window yet");
+
+    session.parser().lock().expect("parser").process(b"\x1b]0;first\x07");
+    assert_eq!(session.take_title().as_deref(), Some("first"));
+    assert_eq!(session.take_title(), None, "a title that has not changed costs nothing");
+
+    session.parser().lock().expect("parser").process(b"\x1b]2;second\x1b\\");
+    assert_eq!(session.take_title().as_deref(), Some("second"), "OSC 2, ended the other way");
+}
+
+#[test]
+fn a_title_with_a_semicolon_in_it_arrives_whole() {
+    // vt100 takes a title only as two parts, so this one would otherwise be lost.
+    let session = PtySession::spawn(CommandBuilder::new("cat"), 8, 40).expect("spawn");
+    session.parser().lock().expect("parser").process(b"\x1b]0;a;b;c\x07");
+    assert_eq!(session.take_title().as_deref(), Some("a;b;c"));
+}
